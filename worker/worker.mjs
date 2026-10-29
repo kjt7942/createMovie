@@ -86,6 +86,7 @@ async function renderJob(cfg, { job, rev, files }) {
   for (const f of files) {
     const r = await fetch(`${cfg.server}/jobs/${job}/${f.split('/').map(encodeURIComponent).join('/')}`, { signal: AbortSignal.timeout(120000) });
     if (!r.ok) throw new Error(`파일 받기 실패: ${f} (${r.status})`);
+    mkdirSync(dirname(join(dir, f)), { recursive: true });   // assets/fonts/ 같은 하위 폴더
     writeFileSync(join(dir, f), Buffer.from(await r.arrayBuffer()));
   }
 

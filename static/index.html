@@ -230,6 +230,14 @@
   .tv-p { background:var(--tally); transform:translateX(-100%); }
   .tv-l { position:absolute; left:8px; bottom:8px; padding:2px 7px; border-radius:5px; background:rgba(10,12,16,.72); color:#fff; font-size:11px; }
   .tv-l:empty { display:none; }
+  .trow { display:flex; gap:6px; align-items:center; margin-bottom:4px; }
+  .trow .typesel { flex:1; max-width:none; }
+  .vbtn { white-space:nowrap; }
+  .numrow { display:grid; grid-template-columns:2fr 1fr; gap:10px; }
+  .numrow .ed { margin:0; width:100%; }
+  .cstrip { display:flex; gap:6px; flex-wrap:wrap; }
+  .cthumb, .cadd { width:52px; height:52px; border-radius:6px; overflow:hidden; border:1px solid var(--line); background:var(--surface); padding:0; cursor:pointer; font-size:18px; color:var(--mute); }
+  .cthumb img { width:100%; height:100%; object-fit:cover; display:block; }
   .trsel { height:30px; border:1px solid var(--line); border-radius:7px; background:var(--surface); font-size:12px; padding:0 6px; color:var(--ink-2); max-width:140px; }
 
   /* ---------- 미리보기 ---------- */
@@ -275,7 +283,10 @@
   }
   @media (max-width: 640px) {
     .top-in, .shell { padding-left:16px; padding-right:16px; }
-    .top-in { gap:12px; }
+    .top-in { gap:8px; }
+    .brand { font-size:0; gap:0; }   /* 좁은 화면: 로고 점만 남겨 '내 프로젝트' 버튼이 밀려나지 않게 */
+    .stepper button { padding:8px 6px; }
+    #openProjects { flex:none; }
     .grid2, .music-ctl { grid-template-columns:1fr; }
     .grp { grid-template-columns:1fr; gap:8px; }
     .sum dl { grid-template-columns:auto 1fr; }
@@ -360,6 +371,8 @@
             <button aria-pressed="true">밝고 경쾌하게</button><button>차분하고 따뜻하게</button><button>감동적으로</button><button>공식적이고 단정하게</button>
           </div></div>
       </div>
+      <div class="field"><span>연출 스타일 <small style="font-weight:400;color:var(--mute)">· 글꼴, 색, 글자 등장 방식, 전환 속도가 한 벌로 바뀌어요</small></span>
+        <div class="seg" id="style"><button data-st="" aria-pressed="true">AI 추천</button><button data-st="classic">클래식</button><button data-st="pop">팝 · 귀엽고 경쾌</button><button data-st="cinematic">시네마틱 · 차분하고 진지</button><button data-st="kinetic">키네틱 · 빠르고 강렬</button></div></div>
       <div class="field"><span>화면 비율</span>
         <div class="seg" id="ratio"><button data-r="landscape" aria-pressed="true">가로 16:9 · 유튜브·TV</button><button data-r="portrait">세로 9:16 · 쇼츠·릴스·스토리</button></div></div>
       <div class="field"><span>영상 길이</span>
@@ -416,6 +429,10 @@
       <div class="ruler" id="ruler"></div>
       <div class="ticks mono" id="ticks"></div>
       <div class="board" id="board"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>연출 스타일</h2><span>바꾸면 글꼴·색·움직임이 통째로 바뀌어요 · 미리보기로 확인해 보세요</span></div>
+      <div class="chips" id="stChips"></div>
     </div>
     <div class="panel">
       <div class="panel-h"><h2>화면 전환</h2><span>장면이 바뀔 때의 효과 · 카드 아래에서 장면마다 따로 고를 수도 있어요</span></div>
@@ -536,7 +553,7 @@ function summary() {
 // ---------- 저장 / 프로젝트 ----------
 let saveT = 0, loading = false, pendingSel = null;
 function settings() {
-  return {brief: $('#brief').value, org: $('#org').value, mood: mood(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
+  return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
           aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2)};
 }
 function dirty() {   // 바뀔 때마다 1.2초 뒤 자동 저장
@@ -571,6 +588,7 @@ async function openProject(j) {
   $('#brief').value = st.brief || ''; $('#org').value = st.org || '';
   press('#mood', $$('#mood button').find(b => b.textContent === st.mood) || $('#mood button'));
   press('#ratio', $$('#ratio button').find(b => b.dataset.r === st.ratio) || $('#ratio button')); applyRatio();
+  press('#style', $$('#style button').find(b => b.dataset.st === (st.style || '')) || $('#style button'));
   const nr = st.narr || {}; $('#narrOn').checked = !!nr.on; $('#narrOpts').hidden = !nr.on;
   press('#voice', $$('#voice button').find(b => b.dataset.v === nr.voice) || $('#voice button'));
   press('#rate', $$('#rate button').find(b => +b.dataset.rate === nr.rate) || $('#rate button'));
@@ -590,7 +608,7 @@ async function openProject(j) {
 function newProject() {
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
   $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false;
-  press('#ratio', $('#ratio button')); applyRatio(); $('#narrOn').checked = false; $('#narrOpts').hidden = true;
+  press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true;
   $('#saved').textContent = ''; $('#projDlg').open && $('#projDlg').close();
   renderAssets(); go(1);
 }
@@ -669,6 +687,8 @@ $$('#mood button').forEach(b => b.onclick = () => { press('#mood', b); dirty(); 
 ['#brief', '#org'].forEach(s => $(s).addEventListener('input', dirty));
 const mood = () => $('#mood button[aria-pressed="true"]').textContent;
 const ratio = () => $('#ratio button[aria-pressed="true"]').dataset.r;
+const styleSel = () => $('#style button[aria-pressed="true"]').dataset.st;
+$$('#style button').forEach(b => b.onclick = () => { press('#style', b); dirty(); });
 const isPortrait = () => ratio() === 'portrait';
 function applyRatio() {
   $('#board').classList.toggle('portrait', isPortrait()); $('#video').classList.toggle('portrait', isPortrait());
@@ -809,7 +829,7 @@ async function ask(revise) {
   const busy = revise ? $('#redo') : $('#to3'), old = busy.innerHTML;   // 지금 누른 버튼에 진행 표시
   busy.innerHTML = `<span class="spin"></span>${revise ? '수정하는 중' : 'AI가 사진을 살펴보는 중'}`; $('#note').textContent = '';
   const prevPlan = revise ? structuredClone(plan) : null;
-  const r = await post('/api/plan', {job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), ratio:ratio(), narr:narrSel(),
+  const r = await post('/api/plan', {job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), style: revise ? (plan.style || styleSel()) : styleSel(), ratio:ratio(), narr:narrSel(),
     ...(revise ? {revise, prev: prevPlan} : {})}).catch(() => ({error: '서버에 연결하지 못했습니다. 서버가 켜져 있는지 확인해 주세요.'}));
   btns.forEach(b => b.disabled = false); busy.innerHTML = old;
   if (r.error) { (revise ? $('#e3') : $('#e2')).textContent = r.error; return; }
@@ -841,10 +861,48 @@ function timing() {   // server.py build()와 같은 계산: 오프닝 0~4.4, �
   const L = lengthSec(), n = plan.scenes.length, st = (L - 8) / n;
   return {L, st, starts: plan.scenes.map((_, i) => 3.6 + st * i), os: 3.6 + st * n};
 }
+// 장면 유형 (server.py normalize_scene / composer.py와 같은 이름)
+const TYPES = {title: '기본', collage: '사진 콜라주', stat: '큰 숫자', quote: '인용·후기', list: '목록·일정'};
+const STYLE_NAMES = {classic: '클래식', pop: '팝', cinematic: '시네마틱', kinetic: '키네틱'};
+const sType = s => TYPES[s.type] ? s.type : 'title';
+const sName = s => s.ttl || s.quote || TYPES[sType(s)];
+const sVar = (s, i) => s.v === 0 || s.v === 1 ? s.v : (i + (plan.seed || 0)) % 2;
+function sSpeech(s) {   // composer.py scene_speech()와 같은 규칙
+  const t = sType(s);
+  if (t === 'stat') return `${s.ttl} ${s.num || ''}${s.unit || ''}. ${s.sub || ''}`.trim();
+  if (t === 'quote') return s.quote || '';
+  if (t === 'list') return `${s.ttl}. ` + (s.items || []).filter(Boolean).join(', ');
+  return `${s.ttl}. ${s.sub || ''}`;
+}
+function setType(s, t) {   // 유형을 바꿀 때 필요한 칸을 채운다
+  s.type = t;
+  if (t === 'collage' && !(s.photos && s.photos.length >= 2)) {
+    const used = new Set(plan.scenes.flatMap(x => [x.photo, ...(x.photos || [])]));
+    const same = meta.photos.filter(p => p.id !== s.photo && !used.has(p.id));
+    s.photos = [s.photo, ...same.slice(0, 2).map(p => p.id)];
+  }
+  if (t === 'list' && !(s.items && s.items.length)) s.items = ['', '', ''];
+  if (t === 'stat') { s.num = s.num || ''; s.unit = s.unit || ''; }
+  if (t === 'quote') { s.quote = s.quote || s.sub || ''; s.who = s.who || ''; }
+}
+function sceneFields(s, i) {
+  const t = sType(s), inp = (f, cls, ph, label) => `<input class="ed ${cls}" data-s="${i}" data-f="${f}" value="${esc(s[f] || '')}" aria-label="${i + 1}번 장면 ${label}" placeholder="${ph}">`;
+  if (t === 'stat') return `<div class="lbl">무엇의 숫자인가요</div>${inp('ttl', 't', '예) 참여 가족', '숫자 설명')}
+      <div class="numrow">${inp('num', 't mono', '예) 320', '숫자')}${inp('unit', 's', '명', '단위')}</div>${inp('sub', 's', '설명 한 줄', '설명')}`;
+  if (t === 'quote') return `<div class="lbl">인용문 · 실제 후기나 슬로건</div>${inp('quote', 't', '예) 아이와 처음으로 하루 종일 웃었어요', '인용문')}
+      ${inp('who', 's', '말한 사람 · 예) 참여 어머니', '말한 사람')}`;
+  if (t === 'list') return `${inp('ttl', 't', '목록 제목', '제목')}<div class="lbl">항목 · 한 줄에 하나 (2~5개)</div>
+      <textarea class="ed s items" rows="4" data-s="${i}" data-f="items" aria-label="${i + 1}번 장면 항목" placeholder="3월 · 입학식&#10;5월 · 가족운동회">${esc((s.items || []).join('\n'))}</textarea>`;
+  const strip = t !== 'collage' ? '' : `<div class="lbl">사진 (2~4장) · 눌러서 바꾸기</div><div class="cstrip">${(s.photos || []).map((p, k) =>
+      `<button class="cthumb" data-pick="${i}:${k}" title="사진 바꾸기"><img src="${thumb(p)}" alt=""></button>`).join('')}
+      ${(s.photos || []).length < 4 ? `<button class="cadd" data-cadd="${i}" title="사진 추가">＋</button>` : ''}
+      ${(s.photos || []).length > 2 ? `<button class="cadd" data-cdel="${i}" title="마지막 사진 빼기">－</button>` : ''}</div>`;
+  return `${inp('ttl', 't', '장면 제목', '제목')}${inp('sub', 's', '설명 한 줄', '설명')}${strip}`;
+}
 function renderPlan() {
   applyRatio();
   const {L, st, starts, os} = timing(), used = new Set(plan.scenes.map(s => s.photo));
-  const blocks = [{k:'intro', w:3.6, t:'오프닝', io:1}, ...plan.scenes.map((s, i) => ({k:i, w:st, t:`${i + 1} ${s.ttl}`})), {k:'outro', w:4.4, t:'엔딩', io:1}];
+  const blocks = [{k:'intro', w:3.6, t:'오프닝', io:1}, ...plan.scenes.map((s, i) => ({k:i, w:st, t:`${i + 1} ${sName(s)}`})), {k:'outro', w:4.4, t:'엔딩', io:1}];
   $('#ruler').innerHTML = blocks.map(b => `<button style="flex:${b.w}" class="${b.io ? 'io' : ''}" data-jump="${b.k}" title="${esc(b.t)}">${esc(b.t)}</button>`).join('');
   const marks = L <= 40 ? 5 : L <= 120 ? 15 : 60, ticks = [];
   for (let t = 0; t < L - marks * 0.4; t += marks) ticks.push(t); ticks.push(L);
@@ -856,16 +914,18 @@ function renderPlan() {
   // 내레이션 칸: 켜져 있을 때만. 글자 수 예산을 넘으면 빨갛게(자동으로 빠르게 읽고, 그래도 넘치면 잘림)
   const caps = narrSlots(L, plan.scenes.length).map(narrCap);
   const nbox = (attrs, val, cap, ph) => !narrSel().on ? '' : `<div class="lbl nl">내레이션 <button class="say" type="button">듣기</button><span class="cnt mono" data-cap="${cap}"></span></div>
-    <textarea class="ed s" rows="2" ${attrs} placeholder="${ph}">${esc(val || '')}</textarea>`;
+    <textarea class="ed s narr" rows="2" ${attrs} placeholder="${ph}">${esc(val || '')}</textarea>`;
   $('#board').innerHTML =
     `<article class="card" data-card="intro"><div style="position:relative">${photoBtn(plan.intro_photo, 'intro')}${tc(0, 4.4)}<span class="kind">오프닝</span></div>
       <div class="card-b">${f('title', '제목', 't')}${f('tagline', '슬로건', 's')}${f('org', '기관명', 's')}${f('year', '연도', 's')}
         ${nbox('data-k="intro_narr"', plan.intro_narr, caps[0], '비워 두면 제목과 슬로건을 읽어요')}</div></article>` +
     plan.scenes.map((s, i) => `<article class="card" data-card="${i}" data-i="${i}">
-      <div style="position:relative">${photoBtn(s.photo, i)}${tc(starts[i], starts[i] + st + 0.6)}</div>
-      <div class="card-b"><input class="ed t" data-s="${i}" data-f="ttl" value="${esc(s.ttl)}" aria-label="${i + 1}번 장면 제목" placeholder="장면 제목">
-        <input class="ed s" data-s="${i}" data-f="sub" value="${esc(s.sub)}" aria-label="${i + 1}번 장면 설명" placeholder="설명 한 줄">
-        ${nbox(`data-s="${i}" data-f="narr"`, s.narr, caps[i + 1], '비워 두면 제목과 설명을 읽어요')}</div>
+      <div style="position:relative">${photoBtn(s.photo, sType(s) === 'collage' ? i + ':0' : i)}${tc(starts[i], starts[i] + st + 0.6)}<span class="kind">${TYPES[sType(s)]}</span></div>
+      <div class="card-b"><div class="trow"><select class="trsel typesel" data-type="${i}" aria-label="${i + 1}번 장면 유형">${Object.entries(TYPES).map(([k, v]) =>
+          `<option value="${k}" ${sType(s) === k ? 'selected' : ''}>유형: ${v}</option>`).join('')}</select>
+        <button class="btn sm vbtn" data-var="${i}" title="같은 유형의 다른 배치로 바꾸기">배치 ${'AB'[sVar(s, i)]} ⇄</button></div>
+        ${sceneFields(s, i)}
+        ${nbox(`data-s="${i}" data-f="narr"`, s.narr, caps[i + 1], '비워 두면 화면 문구를 읽어요')}</div>
       <div class="card-f"><span class="grip" data-grip="${i}" title="끌어서 순서 바꾸기">⠿ <span class="mono">${String(i + 1).padStart(2, '0')}</span></span>
         ${trSel(s.tr, i)}
         <button class="icon-btn" data-del="${i}" aria-label="${i + 1}번 장면 삭제" title="장면 삭제" ${plan.scenes.length <= 1 ? 'disabled' : ''}>✕</button></div></article>`).join('') +
@@ -874,6 +934,10 @@ function renderPlan() {
       <div class="card-b">${f('outro0', '첫째 줄', 't')}${f('outro1', '둘째 줄', 't')}${f('outro2', '마무리 문장', 's')}
         ${nbox('data-k="outro_narr"', plan.outro_narr, caps[caps.length - 1], '비워 두면 마무리 1·2행을 읽어요')}</div>
       <div class="card-f"><span class="grip" style="cursor:default">들어올 때</span>${trSel(plan.outro_tr, 'outro')}</div></article>`;
+  // 연출 스타일
+  const cur = plan.style || 'classic';
+  $('#stChips').innerHTML = Object.entries(STYLE_NAMES).map(([k, v]) => `<button class="chip" data-st="${k}" aria-pressed="${k === cur}">${v}</button>`).join('');
+  $$('#stChips [data-st]').forEach(c => c.onclick = () => { plan.style = c.dataset.st; renderPlan(); });
   // 화면 전환: 전체 설정 칩 + 장면별 선택
   const g = plan.transition || 'mix';
   $('#trChips').innerHTML = ['mix', ...TR_KEYS].map(k => `<button class="chip" data-tr="${k}" aria-pressed="${k === g}">${TR[k]}</button>`).join('');
@@ -885,7 +949,9 @@ function renderPlan() {
   });
   // 입력 즉시 상태 반영
   $$('#board .ed').forEach(el => el.oninput = () => {
-    if (el.dataset.s) { plan.scenes[+el.dataset.s][el.dataset.f] = el.value; if (el.dataset.f === 'ttl') $(`#ruler [data-jump="${el.dataset.s}"]`).textContent = `${+el.dataset.s + 1} ${el.value}`; }
+    if (el.dataset.s) { const sc = plan.scenes[+el.dataset.s];
+      sc[el.dataset.f] = el.dataset.f === 'items' ? el.value.split('\n') : el.value;
+      if (['ttl', 'quote'].includes(el.dataset.f)) $(`#ruler [data-jump="${el.dataset.s}"]`).textContent = `${+el.dataset.s + 1} ${sName(sc)}`; }
     else if (/^outro\d$/.test(el.dataset.k)) plan.outro[+el.dataset.k.slice(5)] = el.value;
     else plan[el.dataset.k] = el.value;
     dirty();
@@ -893,8 +959,8 @@ function renderPlan() {
   $$('#board [data-pick]').forEach(b => b.onclick = () => openPicker(b.dataset.pick));
   // 내레이션 글자 수 표시 + 듣기 (비어 있으면 server.py narr_texts()처럼 화면 문구를 읽는다)
   const narrText = ta => ta.value.trim() || (ta.dataset.k === 'intro_narr' ? `${plan.title}. ${plan.tagline}`
-    : ta.dataset.k === 'outro_narr' ? plan.outro.slice(0, 2).join(' ') : `${plan.scenes[+ta.dataset.s].ttl}. ${plan.scenes[+ta.dataset.s].sub}`);
-  $$('#board textarea.ed').forEach(ta => {
+    : ta.dataset.k === 'outro_narr' ? plan.outro.slice(0, 2).join(' ') : sSpeech(plan.scenes[+ta.dataset.s]));
+  $$('#board textarea.narr').forEach(ta => {
     const lbl = ta.previousElementSibling, cnt = lbl.querySelector('.cnt'), cap = +cnt.dataset.cap;
     const upd = () => { const n = narrText(ta).replace(/\s/g, '').length; cnt.textContent = `${n}/${cap}자`; cnt.classList.toggle('over', n > cap);
       cnt.title = n > cap ? '길어서 빠르게 읽거나 끝이 잘릴 수 있어요' : ''; };
@@ -902,9 +968,15 @@ function renderPlan() {
     lbl.querySelector('.say').onclick = e => say(narrText(ta), e.currentTarget);
   });
   $$('#board [data-del]').forEach(b => b.onclick = () => { plan.scenes.splice(+b.dataset.del, 1); renderPlan(); summary(); });
+  $$('#board .typesel').forEach(sel => sel.onchange = () => { setType(plan.scenes[+sel.dataset.type], sel.value); renderPlan(); });
+  $$('#board [data-var]').forEach(b => b.onclick = () => { const i = +b.dataset.var, sc = plan.scenes[i]; sc.v = 1 - sVar(sc, i); renderPlan(); });
+  $$('#board [data-cadd]').forEach(b => b.onclick = () => { const sc = plan.scenes[+b.dataset.cadd];
+    const used = new Set(plan.scenes.flatMap(x => [x.photo, ...(x.photos || [])]));
+    sc.photos.push((meta.photos.find(p => !used.has(p.id)) || meta.photos[0]).id); renderPlan(); });
+  $$('#board [data-cdel]').forEach(b => b.onclick = () => { plan.scenes[+b.dataset.cdel].photos.pop(); renderPlan(); });
   $('#addScene').onclick = () => {
     const free = meta.photos.find(p => !used.has(p.id)) || meta.photos[0];
-    plan.scenes.push({ttl: '', sub: '', photo: free.id}); renderPlan(); summary();
+    plan.scenes.push({type: 'title', ttl: '', sub: '', photo: free.id}); renderPlan(); summary();
     $(`[data-card="${plan.scenes.length - 1}"] .ed.t`).focus();
   };
   // 손잡이로만 드래그해서 순서 바꾸기 (입력칸 글자 선택과 충돌하지 않게)
@@ -967,14 +1039,18 @@ function previewTr(k) {
 let pickSlot = null;
 function openPicker(slot) {
   pickSlot = slot;
-  const cur = slot === 'intro' ? plan.intro_photo : slot === 'outro' ? plan.outro_photo : plan.scenes[+slot].photo;
-  const used = new Set([plan.intro_photo, plan.outro_photo, ...plan.scenes.map(s => s.photo)]);
-  $('#pickTitle').textContent = slot === 'intro' ? '오프닝 사진 바꾸기' : slot === 'outro' ? '엔딩 사진 바꾸기' : `${+slot + 1}번 장면 사진 바꾸기`;
+  const [si, k] = String(slot).split(':'), sc = plan.scenes[+si];
+  const cur = slot === 'intro' ? plan.intro_photo : slot === 'outro' ? plan.outro_photo : k !== undefined ? sc.photos[+k] : sc.photo;
+  const used = new Set([plan.intro_photo, plan.outro_photo, ...plan.scenes.flatMap(s => [s.photo, ...(s.photos || [])])]);
+  $('#pickTitle').textContent = slot === 'intro' ? '오프닝 사진 바꾸기' : slot === 'outro' ? '엔딩 사진 바꾸기' : `${+si + 1}번 장면 사진 바꾸기`;
   const g = {}; meta.photos.forEach(p => (g[p.folder || '폴더 없이 올린 사진'] ||= []).push(p));
   $('#pickBody').innerHTML = Object.entries(g).map(([k, ps]) => `<h4>${esc(k)}</h4><div class="pick">` +
     ps.map(p => `<button data-id="${p.id}" class="${p.id === cur ? 'cur' : used.has(p.id) ? 'used' : ''}" title="${esc(p.path)}"><img src="${thumb(p.id)}" alt="${esc(p.path)}" loading="lazy"></button>`).join('') + '</div>').join('');
   $$('#pickBody [data-id]').forEach(b => b.onclick = () => {
-    if (pickSlot === 'intro') plan.intro_photo = b.dataset.id; else if (pickSlot === 'outro') plan.outro_photo = b.dataset.id; else plan.scenes[+pickSlot].photo = b.dataset.id;
+    const [pi, pk] = String(pickSlot).split(':');
+    if (pickSlot === 'intro') plan.intro_photo = b.dataset.id; else if (pickSlot === 'outro') plan.outro_photo = b.dataset.id;
+    else if (pk !== undefined) { const sc = plan.scenes[+pi]; sc.photos[+pk] = b.dataset.id; sc.photo = sc.photos[0]; }
+    else plan.scenes[+pi].photo = b.dataset.id;
     $('#picker').close(); renderPlan();
   });
   $('#picker').showModal();
@@ -986,7 +1062,16 @@ $('#picker').addEventListener('click', e => { if (e.target === $('#picker')) $('
 let poll = 0;
 function planOk() {
   $('#e3').textContent = $('#e4').textContent = '';
-  if (plan.scenes.some(s => !s.ttl.trim())) { $('#e3').textContent = '제목이 비어 있는 장면이 있습니다. 제목을 채우거나 장면을 삭제해 주세요.'; return false; }
+  const bad = plan.scenes.map((s, i) => {
+    const t = sType(s), n = `${i + 1}번 장면(${TYPES[t]})`;
+    if (t === 'quote') return (s.quote || '').trim() ? '' : `${n}의 인용문이 비어 있습니다.`;
+    if (!(s.ttl || '').trim()) return `${n}의 제목이 비어 있습니다.`;
+    if (t === 'stat' && !/\d/.test(s.num || '')) return `${n}에 숫자를 넣어 주세요.`;
+    if (t === 'list' && (s.items || []).filter(x => x.trim()).length < 2) return `${n}에 항목을 2개 이상 적어 주세요.`;
+    if (t === 'collage' && (s.photos || []).length < 2) return `${n}에 사진을 2장 이상 넣어 주세요.`;
+    return '';
+  }).filter(Boolean);
+  if (bad.length) { $('#e3').textContent = bad.join(' ') + ' 고치거나 유형을 바꿔 주세요.'; return false; }
   return true;
 }
 

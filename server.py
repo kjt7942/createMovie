@@ -1,14 +1,15 @@
 """홍보영상 제작 웹앱. 업로드(폴더 포함) -> Gemini가 장면/사진 배정 -> HyperFrames 렌더.
 실행: GEMINI_API_KEY 환경변수(또는 이 폴더의 .env)를 준비하고 `python server.py` -> http://localhost:5000
 WORKER_TOKEN을 설정하면 렌더링을 이 서버에서 하지 않고 대기열에 넣어 두고, PC의 렌더 워커(worker/)가 가져가 처리한다."""
-import base64, hmac, html, itertools, json, os, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid
+import base64, hmac, html, itertools, json, os, random, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 from flask import Flask, abort, jsonify, request, send_from_directory
 from PIL import Image, ImageOps
+import composer
+from composer import SCENE_TYPES, STYLES, scene_speech
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 JOBS = os.path.join(HERE, 'jobs')
 MODELS = ['gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite']  # 한도 걸리면 다음 모델
-COLORS = ['#ff6b4a', '#ffc93c', '#3ddc97']
 MAX_VISION = 40  # Gemini에 보여줄 사진 수 상한(초과분은 균등 샘플링)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -91,7 +92,7 @@ def reset():
 PROMPT = """너는 홍보영상 기획자다. 사진은 폴더(주제)별로 정리돼 있고 폴더명은 사업/주제 이름이다.
 아래 요구사항으로 영상 구성을 JSON으로만 답해라. 한국어, 한자 사용 금지.
 요구사항에 없는 사실, 폴더명과 사진에서 확인되지 않는 프로그램은 지어내지 마라.
-스키마: {"year":"2026","title":"행사/영상 제목 5~8자","tagline":"슬로건 20자 이내","org":"기관명",
+스키마: {"style":"연출 스타일","year":"2026","title":"행사/영상 제목 5~8자","tagline":"슬로건 20자 이내","org":"기관명",
 "intro_photo":"사진id","outro_photo":"사진id",
 "scenes":[{"type":"장면 유형","ttl":"장면 제목 10자 이내","sub":"세부 내용 30자 이내","photo":"사진id", ...유형별 필드}],
 "outro":["마무리 1행 12자 이내","마무리 2행 12자 이내","마무리 문장 35자 이내"]}
@@ -103,12 +104,13 @@ PROMPT = """너는 홍보영상 기획자다. 사진은 폴더(주제)별로 정
 - "quote": ttl(장면 이름, 화면에는 안 나옴), quote(인용문 40자 이내), who(말한 사람, 예 "참여 어머니"), photo.
   요구사항에 실제 후기·소감이 적혀 있을 때만 그 내용으로 쓴다. 후기를 지어내지 마라.
 - "list": ttl, items(3~4개, 각 14자 이내. 일정이면 "3월 입학식"처럼 시기를 앞에), photo. 여러 활동이나 일정을 한 장면에 묶을 때.
+연출 스타일(style)은 다음 중 하나: %s
 규칙:
 - scenes는 %d~%d개. 폴더가 여러 개면 폴더 하나가 장면 하나가 되게 하고, 폴더명을 제목에 반영한다.
 - 주제와 내용에 맞게 장면 유형을 골라 섞어라. 같은 유형이 3번 넘게 연속되지 않게 하고, 근거 없는 stat·quote는 쓰지 않는다.
 - 각 장면 photo는 장면 주제와 사진 내용이 가장 잘 맞는 사진 id. 같은 사진 중복은 피한다.
 - intro_photo는 밝고 대표적인 사진, outro_photo는 화목한 단체/가족 사진.
-- 문구 분위기: %s. 영상 길이: %d초.
+- 문구 분위기: %s. 영상 길이: %d초. %s
 요구사항: %s
 기관/단체명(비어 있으면 요구사항에서 찾아라): %s
 %s"""
@@ -147,6 +149,8 @@ def normalize_scene(s, ids, pick):
            'narr': clean(s.get('narr', ''))}
     if s.get('tr'):
         out['tr'] = s['tr']
+    if s.get('v') in (0, 1):
+        out['v'] = s['v']
     if t == 'collage':
         ps = [x for x in dict.fromkeys(s.get('photos') or []) if x in ids][:4]
         if s.get('photo') in ids and s['photo'] not in ps:
@@ -207,7 +211,10 @@ def plan():
     photos = m['photos']
     if len(photos) > MAX_VISION:
         photos = [photos[int(i * len(photos) / MAX_VISION)] for i in range(MAX_VISION)]
-    parts = [{'text': PROMPT % (lo, hi, b.get('mood', '밝고 경쾌하게'), length, b.get('brief') or '(없음)', b.get('org') or '', revise)}]
+    want = b.get('style') if b.get('style') in STYLES else None   # None = AI가 고른다
+    style_rule = (f'style은 반드시 "{want}"로 한다.' if want else '주제와 분위기에 가장 어울리는 style을 골라라.')
+    parts = [{'text': PROMPT % (composer.STYLE_HINT, lo, hi, b.get('mood', '밝고 경쾌하게'), length, style_rule,
+                                b.get('brief') or '(없음)', b.get('org') or '', revise)}]
     for p in photos:
         parts.append({'text': f'사진id={p["id"]} 폴더={p["folder"] or "(없음)"} 파일={p["path"].split("/")[-1]}'})
         parts.append({'inline_data': {'mime_type': 'image/jpeg', 'data': base64.b64encode(
@@ -224,13 +231,16 @@ def plan():
                'outro': [clean(x) for x in (d.get('outro') or [])[:3]] + [''] * 3,
                'intro_narr': clean(d.get('intro_narr', '')), 'outro_narr': clean(d.get('outro_narr', ''))}
         out['outro'] = out['outro'][:3]
-        prev = b.get('prev') or {}  # 수정 요청 시 사용자가 고른 전환 효과는 유지
+        out['style'] = want or (d.get('style') if d.get('style') in STYLES else 'classic')
+        prev = b.get('prev') or {}  # 수정 요청 시 사용자가 고른 전환 효과·장면 배치는 유지
+        out['seed'] = prev.get('seed') if isinstance(prev.get('seed'), int) else random.randrange(1000)
         for k in ('transition', 'outro_tr'):
             if prev.get(k):
                 out[k] = prev[k]
         for s, ps in zip(out['scenes'], prev.get('scenes') or []):
-            if ps.get('tr'):
-                s['tr'] = ps['tr']
+            for k in ('tr', 'v'):
+                if k in ps and k not in s:
+                    s[k] = ps[k]
         if len(out['scenes']) < 1:
             raise RuntimeError('AI가 장면을 만들지 못했습니다. 다시 시도해 주세요.')
     except (RuntimeError, KeyError, TypeError) as e:
@@ -314,288 +324,15 @@ def tts():
 
 # ---------- 렌더 ----------
 # 화면 전환 종류. 'mix'(기본)는 MIX 순서대로 돌아가며 섞는다. 장면별 지정(scene.tr)이 전체 설정보다 우선.
-TRANSITIONS = ['panel', 'slide', 'fade', 'zoom', 'blur', 'wipe', 'wipe-up', 'split', 'circle', 'diagonal', 'whip', 'flash', 'spin']
-MIX = ['panel', 'wipe', 'zoom', 'circle', 'whip', 'slide', 'split', 'flash', 'fade', 'diagonal', 'spin', 'wipe-up', 'blur']
-TIMELINE_JS = '''<script>
-      window.__timelines = window.__timelines || {};
-      const tl = gsap.timeline({ paused: true });
-      const starts = __STARTS__, d = __DUR__, os = __OS__, total = __TOTAL__, TR = __TRS__, TYPES = __TYPES__;
-      const CLIP = {
-        wipe: ["inset(0 0 0 100%)", "inset(0 0 0 0%)"], "wipe-up": ["inset(100% 0 0 0)", "inset(0% 0 0 0)"],
-        split: ["inset(0 50% 0 50%)", "inset(0 0% 0 0%)"], circle: ["circle(0% at 50% 50%)", "circle(150% at 50% 50%)"],
-        diagonal: ["polygon(0% 0%, 0% 0%, -50% 100%, -50% 100%)", "polygon(0% 0%, 150% 0%, 100% 100%, -50% 100%)"] };
-      function trans(kind, el, s, i) {
-        if (kind === "panel") tl.fromTo(["#p_a", "#p_b", "#p_c"][i % 3], { x: "-100%" }, { x: "100%", duration: 0.9, ease: "power2.inOut" }, s - 0.35);
-        else if (CLIP[kind]) tl.fromTo(el, { clipPath: CLIP[kind][0] }, { clipPath: CLIP[kind][1], duration: 0.85, ease: "power3.inOut" }, s);
-        else if (kind === "slide") tl.fromTo(el, { xPercent: 100 }, { xPercent: 0, duration: 0.8, ease: "power3.inOut" }, s);
-        else if (kind === "zoom") tl.fromTo(el, { opacity: 0, scale: 1.25 }, { opacity: 1, scale: 1, duration: 0.9, ease: "power3.out" }, s);
-        else if (kind === "blur") tl.fromTo(el, { opacity: 0, filter: "blur(40px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.9, ease: "power2.out" }, s);
-        else if (kind === "whip") tl.fromTo(el, { xPercent: 100, filter: "blur(24px)" }, { xPercent: 0, filter: "blur(0px)", duration: 0.45, ease: "expo.out" }, s);
-        else if (kind === "flash") {   // 하얗게 번쩍인 뒤 살짝 줌아웃
-          tl.fromTo("#flash", { opacity: 1 }, { opacity: 0, duration: 0.55, ease: "power2.out", immediateRender: false }, s);
-          tl.fromTo(el, { scale: 1.2 }, { scale: 1, duration: 0.7, ease: "expo.out" }, s);
-        }
-        else if (kind === "spin") tl.fromTo(el, { scale: 0.4, rotation: -10, opacity: 0 }, { scale: 1, rotation: 0, opacity: 1, duration: 0.6, ease: "back.out(1.4)" }, s);
-        else tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "power1.inOut" }, s);
-      }
-
-      tl.fromTo("#b1", { scale: 0 }, { scale: 1, duration: 1.0, ease: "back.out(1.6)" }, 0.05);
-      tl.fromTo("#b2", { scale: 0 }, { scale: 1, duration: 1.0, ease: "back.out(1.6)" }, 0.2);
-      tl.fromTo("#b3", { scale: 0 }, { scale: 1, duration: 0.8, ease: "back.out(2)" }, 0.35);
-      tl.fromTo("#yr", { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.3);
-      tl.fromTo("#big", { opacity: 0, y: 70, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power4.out" }, 0.5);
-      tl.fromTo("#hanja", { opacity: 0 }, { opacity: 1, duration: 0.7 }, 1.2);
-      tl.fromTo("#org", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 1.6);
-      tl.to("#intro .photo", { scale: 1.08, duration: 4.4, ease: "none" }, 0);
-      tl.to("#b1", { x: 40, y: 30, duration: 4, ease: "sine.inOut" }, 1);
-
-      starts.forEach((s, i) => {
-        const id = "#s" + (i + 1);
-        trans(TR[i], id, s, i);
-        const T = TYPES[i], zoomIn = i % 2 === 0;
-        const up = (sel, at, y = 50, dd = 0.6) => tl.fromTo(id + " " + sel, { opacity: 0, y }, { opacity: 1, y: 0, duration: dd, ease: "power4.out" }, s + at);
-        if (T === "collage") {
-          tl.fromTo(id + " .tile", { opacity: 0, scale: 0.86 }, { opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.5)", stagger: 0.14 }, s + 0.15);
-          tl.fromTo(id + " .tile img", { scale: 1.16 }, { scale: 1.0, duration: d, ease: "none" }, s);
-          tl.fromTo(id + " .cbar", { scaleX: 0 }, { scaleX: 1, duration: d, ease: "none" }, s);
-          up(".ttl", 0.55); up(".sub", 0.8, 30);
-          return;
-        }
-        tl.fromTo(id + " .photo", { scale: zoomIn ? 1.0 : 1.14, x: zoomIn ? 0 : 24 }, { scale: zoomIn ? 1.14 : 1.0, x: zoomIn ? -24 : 0, duration: d, ease: "none" }, s);
-        tl.fromTo(id + " .tag", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.5 }, s + 0.9);
-        if (T === "stat") {
-          up(".stat-l", 0.3, -30);
-          tl.fromTo(id + " .stat-n", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power3.out" }, s + 0.35);
-          tl.fromTo(id + " .strip", { yPercent: 0 }, { yPercent: (k, el) => -10 * +el.dataset.d, duration: 1.6, ease: "power3.out", stagger: 0.08 }, s + 0.4);
-          up(".unit", 1.3, 20, 0.5); up(".stat-s", 1.5, 30);
-        } else if (T === "quote") {
-          tl.fromTo(id + " .qmark", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.7, ease: "back.out(2)" }, s + 0.3);
-          up(".qtext", 0.6, 40, 0.9); up(".qwho", 1.4, 20);
-        } else if (T === "list") {
-          tl.fromTo(id + " .lpanel", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, s + 0.1);
-          up(".ttl", 0.35);
-          tl.fromTo(id + " .bar", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out" }, s + 0.5);
-          tl.fromTo(id + " .items li", { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.5, ease: "power3.out", stagger: Math.min(0.45, (d - 1.8) / 5) }, s + 0.8);
-        } else {
-          tl.fromTo(id + " .num", { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.6, ease: "power3.out" }, s + 0.35);
-          tl.fromTo(id + " .bar", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out" }, s + 0.5);
-          up(".ttl", 0.55); up(".sub", 0.8, 30, 0.55);
-        }
-      });
-
-      trans(TR[starts.length], "#outro", os, starts.length);
-      tl.fromTo("#ob1", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.5);
-      tl.fromTo("#ob2", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.6);
-      tl.fromTo("#o1", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.7, ease: "power4.out" }, os + 0.7);
-      tl.fromTo("#o2", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.7, ease: "power4.out" }, os + 1.0);
-      tl.fromTo("#o3", { opacity: 0 }, { opacity: 1, duration: 0.7 }, os + 1.6);
-      tl.to("#outro .photo", { scale: 1.08, duration: 4.4, ease: "none" }, os);
-      tl.to("#root", { opacity: 0, duration: 0.5, ease: "power1.in" }, total - 0.5);
-      tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
-
-      window.__timelines["main"] = tl;
-      tl.seek(0);
-    </script>'''
-
-
-# 세로(9:16, 1080x1920) 배치: base_template의 가로 좌표를 덮어쓴다. 문구는 사진 아래쪽에 모은다.
-PORTRAIT_CSS = '''<style>
-      html, body, #root { width: 1080px; height: 1920px; }
-      .panel { width: 1080px; height: 1920px; }
-      #progress { width: 1080px; }
-      .shade { background:
-        linear-gradient(0deg, rgba(15,12,25,.88) 0%, rgba(15,12,25,.55) 35%, rgba(15,12,25,0) 62%),
-        linear-gradient(180deg, rgba(15,12,25,.45) 0%, rgba(15,12,25,0) 18%); }
-      .num { left: 80px; top: 1010px; font-size: 170px; }
-      .bar { left: 86px; top: 1230px; }
-      .ttl { left: 80px; right: 80px; top: 1270px; font-size: 88px; line-height: 1.15; }
-      .sub { left: 84px; right: 84px; top: 1400px; font-size: 42px; line-height: 1.45; }
-      .tag { right: 60px; top: 90px; font-size: 28px; }
-      .yr, .big, .hanja, .org, .o1, .o2, .o3 { width: 1080px; padding: 0 60px; }
-      .yr { top: 600px; font-size: 52px; }
-      .big { top: 690px; line-height: 1.1; }
-      .hanja { top: 1000px; font-size: 40px; letter-spacing: .2em; line-height: 1.5; }
-      .org { top: 1180px; font-size: 46px; }
-      .o1 { top: 720px; font-size: 76px; }
-      .o2 { top: 840px; font-size: 76px; }
-      .o3 { top: 1040px; font-size: 42px; line-height: 1.5; }
-    </style>'''
-
-
-# ---------- 장면 유형 ----------
-# title(기본: 번호·제목·설명) / collage(사진 2~4장) / stat(큰 숫자) / quote(후기·인용문) / list(목록·일정)
-SCENE_TYPES = ['title', 'collage', 'stat', 'quote', 'list']
-SCENE_CSS = '''<style>
-      .scene .tile { position: relative; overflow: hidden; border-radius: 22px; background: #2a2836; }
-      .scene .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-      .grid { position: absolute; left: 40px; right: 40px; top: 40px; bottom: 250px; display: grid; gap: 22px; }
-      .grid.g2 { grid-template-columns: 1fr 1fr; }
-      .grid.g3 { grid-template-columns: 1.35fr 1fr; grid-template-rows: 1fr 1fr; }
-      .grid.g3 .tile:first-child { grid-row: span 2; }
-      .grid.g4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-      .t-collage .ttl { top: auto; bottom: 108px; left: 60px; font-size: 84px; }
-      .t-collage .sub { top: auto; bottom: 46px; left: 64px; font-size: 40px; }
-      .t-collage .cbar { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: var(--c); transform-origin: 0 50%; }
-
-      .dim { position: absolute; inset: 0; background: rgba(15,12,25,.8); }
-      .t-stat .photo { filter: blur(10px); }
-      .stat-l, .stat-n, .stat-s { position: absolute; left: 0; width: 100%; text-align: center; padding: 0 80px; }
-      .stat-l { top: 230px; font-size: 64px; font-weight: 800; color: var(--c); letter-spacing: -0.02em; }
-      .stat-n { top: 340px; font-size: 300px; font-weight: 900; line-height: 1; letter-spacing: -0.05em; white-space: nowrap; }
-      .stat-n .dg { display: inline-block; height: 1em; overflow: hidden; vertical-align: top; }
-      .stat-n .strip { display: block; line-height: 1; }
-      .stat-n .strip b { display: block; height: 1em; font-weight: 900; }
-      .stat-n .unit { font-size: 110px; margin-left: 18px; letter-spacing: -0.02em; display: inline-block; }
-      .stat-s { top: 720px; font-size: 48px; font-weight: 500; color: rgba(255,255,255,.9); }
-
-      .qshade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(15,12,25,.94) 0%, rgba(15,12,25,.86) 52%, rgba(15,12,25,.2) 85%); }
-      .qmark { position: absolute; left: 100px; top: 40px; font-size: 380px; font-weight: 900; line-height: 1; color: var(--c); transform-origin: 30% 60%; }
-      .qtext { position: absolute; left: 120px; top: 360px; width: 1080px; font-size: 76px; font-weight: 800; line-height: 1.38; letter-spacing: -0.03em; word-break: keep-all; }
-      .qwho { position: absolute; left: 124px; top: 830px; font-size: 42px; font-weight: 600; color: rgba(255,255,255,.8); }
-
-      .lpanel { position: absolute; left: 0; top: 0; bottom: 0; width: 1040px; background: rgba(20,18,30,.93); }
-      .t-list .ttl { top: 150px; font-size: 92px; }
-      .t-list .bar { top: 290px; }
-      .items { position: absolute; left: 116px; top: 350px; width: 860px; list-style: none; }
-      .items li { display: flex; align-items: center; gap: 30px; font-size: 54px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 38px; }
-      .items li i { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--c); }
-    </style>'''
-PORTRAIT_SCENE_CSS = '''<style>
-      .grid { left: 36px; right: 36px; top: 36px; bottom: 560px; gap: 18px; }
-      .grid.g3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1.3fr 1fr; }
-      .grid.g3 .tile:first-child { grid-row: auto; grid-column: span 2; }
-      .t-collage .ttl { left: 70px; right: 70px; bottom: 300px; font-size: 80px; }
-      .t-collage .sub { left: 74px; right: 74px; bottom: 120px; font-size: 42px; }
-      .stat-l { top: 600px; font-size: 56px; }
-      .stat-n { top: 700px; font-size: 220px; padding: 0 30px; }
-      .stat-n .unit { font-size: 90px; }
-      .stat-s { top: 1000px; font-size: 44px; line-height: 1.45; }
-      .qshade { background: linear-gradient(0deg, rgba(15,12,25,.95) 0%, rgba(15,12,25,.88) 50%, rgba(15,12,25,.15) 80%); }
-      .qmark { left: 60px; top: 700px; font-size: 300px; }
-      .qtext { left: 80px; top: 980px; width: 920px; font-size: 66px; }
-      .qwho { left: 84px; top: 1560px; font-size: 40px; }
-      .lpanel { top: 820px; width: auto; right: 0; }
-      .t-list .ttl { top: 880px; left: 80px; right: 80px; font-size: 80px; }
-      .t-list .bar { top: 1000px; left: 86px; }
-      .items { left: 86px; top: 1060px; width: 900px; }
-      .items li { font-size: 50px; margin-bottom: 34px; }
-    </style>'''
-
-
-def digits_html(num):
-    """'1,200' -> 자릿수마다 0~9 띠(strip). 타임라인이 띠를 올려 숫자가 굴러가며 올라간다(렌더 시 결정적)."""
-    out = []
-    for ch in num:
-        if ch.isdigit():
-            out.append('<span class="dg"><span class="strip" data-d="%s">%s</span></span>' % (ch, ''.join(f'<b>{d}</b>' for d in range(10))))
-        else:
-            out.append(f'<span>{html.escape(ch)}</span>')
-    return ''.join(out)
-
-
-def scene_html(i, s, org, start, dur):
-    e = html.escape
-    t = s.get('type') if s.get('type') in SCENE_TYPES else 'title'
-    head = f'<div id="s{i+1}" class="scene clip t-{t}" data-start="{start}" data-duration="{dur}" data-track-index="1" style="--c:{COLORS[i%3]}">'
-    img = f'<img class="photo" src="assets/{s["photo"]}.jpg" alt="" />'
-    tag = f'<div class="tag">{org}</div>'
-    if t == 'collage':
-        ps = (s.get('photos') or [s['photo']])[:4]
-        tiles = ''.join(f'<div class="tile"><img src="assets/{p}.jpg" alt="" /></div>' for p in ps)
-        body = (f'<div class="grid g{max(2, len(ps))}">{tiles}</div>'
-                f'<div class="ttl">{e(s["ttl"])}</div><div class="sub">{e(s.get("sub", ""))}</div><div class="cbar"></div>')
-    elif t == 'stat':
-        body = (f'{img}<div class="dim"></div><div class="stat-l">{e(s["ttl"])}</div>'
-                f'<div class="stat-n">{digits_html(s["num"])}<span class="unit">{e(s.get("unit", ""))}</span></div>'
-                f'<div class="stat-s">{e(s.get("sub", ""))}</div>{tag}')
-    elif t == 'quote':
-        who = f'— {e(s["who"])}' if s.get('who') else ''
-        body = (f'{img}<div class="qshade"></div><div class="qmark">“</div>'
-                f'<div class="qtext">{e(s["quote"])}</div><div class="qwho">{who}</div>{tag}')
-    elif t == 'list':
-        lis = ''.join(f'<li><i></i><span>{e(x)}</span></li>' for x in s['items'][:5])
-        body = (f'{img}<div class="lpanel"></div><div class="ttl">{e(s["ttl"])}</div><div class="bar"></div>'
-                f'<ul class="items">{lis}</ul>{tag}')
-    else:
-        body = (f'{img}<div class="shade"></div><div class="num">{i+1:02d}</div><div class="bar"></div>'
-                f'<div class="ttl">{e(s["ttl"])}</div><div class="sub">{e(s.get("sub", ""))}</div>{tag}')
-    return f'\n      {head}\n        {body}\n      </div>'
-
-
-def scene_speech(s):
-    """내레이션이 비어 있을 때 대신 읽을 문장(화면 문구 기반)."""
-    t = s.get('type')
-    if t == 'stat':
-        return f"{s['ttl']} {s['num']}{s.get('unit', '')}. {s.get('sub', '')}".strip()
-    if t == 'quote':
-        return s['quote']
-    if t == 'list':
-        return f"{s['ttl']}. " + ', '.join(s['items'])
-    return f"{s['ttl']}. {s.get('sub', '')}"
-
-
 def build(job, p, length, audio, name='index.html', extra='', ratio='landscape', narr=None):
-    e = html.escape
-    base = open(os.path.join(HERE, 'base_template.html'), encoding='utf-8').read()
-    css = re.search(r'<style>.*?</style>', base, re.S).group(0) + '\n    ' + SCENE_CSS
-    portrait = ratio == 'portrait'
-    W, H = (1080, 1920) if portrait else (1920, 1080)
-    if portrait:
-        css += '\n    ' + PORTRAIT_CSS + '\n    ' + PORTRAIT_SCENE_CSS
-    tl_ = max(1, len(p['title']))
-    big_fs = min(190, int(940 / tl_)) if portrait else (230 if tl_ <= 8 else 170)
-    n = len(p['scenes'])
-    step = (length - 8) / n; dur = round(step + 0.6, 2)
-    starts = [round(3.6 + step * i, 2) for i in range(n)]
-    os_ = round(3.6 + step * n, 2); total = float(length)
-    org = e(p['org'])
-    scenes = ''.join(scene_html(i, s, org, starts[i], dur) for i, s in enumerate(p['scenes']))
-    t = e(p['title']); o = [e(x) for x in p['outro']]
+    """내레이션을 만들고 composer로 HTML을 조립해 작업 폴더에 쓴다. 잘린 내레이션 구간 목록을 돌려준다."""
     clips, cut = make_narration(job, p, length, narr) if narr and narr.get('on') else ([], [])
     audio = (f'<audio id="bgm" src="assets/bgm.mp3" data-start="0" data-duration="{audio["dur"]}" data-media-start="{audio["start"]}" '
              f'data-track-index="9" data-volume="{0.25 if clips else 0.7}" data-fade-in="1" data-fade-out="2"></audio>') if audio else ''
     audio += ''.join(f'\n      <audio id="nr{i}" src="assets/{f}" data-start="{s}" data-duration="{d}" data-track-index="{20 + i}" data-volume="1"></audio>'
                      for i, (s, d, f) in enumerate(clips))  # 내레이션이 있으면 배경음악을 0.25로 낮춘다
-    body = f'''
-      <div id="intro" class="scene clip" data-start="0" data-duration="4.4" data-track-index="0">
-        <img class="photo" src="assets/{p['intro_photo']}.jpg" alt="" />
-        <div class="blob" id="b1" style="width:620px;height:620px;left:-160px;top:-140px;background:var(--coral);opacity:.9"></div>
-        <div class="blob" id="b2" style="width:380px;height:380px;right:-90px;bottom:-110px;background:var(--sun);opacity:.95"></div>
-        <div class="blob" id="b3" style="width:160px;height:160px;right:300px;top:90px;background:var(--mint);opacity:.9"></div>
-        <div class="yr" id="yr">{e(p['year'])}</div>
-        <div class="big" id="big" style="font-size:{big_fs}px"><span class="o">{t[:1]}</span>{t[1:]}</div>
-        <div class="hanja" id="hanja">{e(p['tagline'])}</div>
-        <div class="org" id="org"><b>{org}</b></div>
-      </div>{scenes}
-      <div id="outro" class="scene clip" data-start="{os_}" data-duration="4.4" data-track-index="2">
-        <img class="photo" src="assets/{p['outro_photo']}.jpg" alt="" />
-        <div class="blob" id="ob1" style="width:520px;height:520px;right:-120px;top:-140px;background:var(--coral);opacity:.9"></div>
-        <div class="blob" id="ob2" style="width:300px;height:300px;left:-80px;bottom:-90px;background:var(--mint);opacity:.9"></div>
-        <div class="o1" id="o1">{o[0]}</div><div class="o2" id="o2">{o[1]}</div><div class="o3" id="o3">{o[2]}</div>
-      </div>
-      <div class="panel" id="p_a" style="background:var(--coral)"></div>
-      <div class="panel" id="p_b" style="background:var(--sun)"></div>
-      <div class="panel" id="p_c" style="background:var(--mint)"></div>
-      <div id="flash" style="position:absolute;inset:0;background:#fff;opacity:0;z-index:55;pointer-events:none"></div>
-      <div id="progress"></div>{audio}'''
-    glob = p.get('transition') or 'mix'
-    pick = lambda i, v: v if v in TRANSITIONS else glob if glob in TRANSITIONS else MIX[i % len(MIX)]
-    trs = [pick(i, s.get('tr')) for i, s in enumerate(p['scenes'])] + [pick(n, p.get('outro_tr'))]
-    js = (TIMELINE_JS.replace('__STARTS__', json.dumps(starts)).replace('__DUR__', str(dur)).replace('__OS__', str(os_))
-          .replace('__TOTAL__', str(total)).replace('__TRS__', json.dumps(trs))
-          .replace('__TYPES__', json.dumps([s.get('type') if s.get('type') in SCENE_TYPES else 'title' for s in p['scenes']])))
-    open(os.path.join(jobdir(job), name), 'w', encoding='utf-8').write(f'''<!doctype html>
-<html lang="ko" data-resolution="{'portrait' if portrait else 'landscape'}">
-  <head><meta charset="UTF-8" /><meta name="viewport" content="width={W}, height={H}" />
-    <script src="assets/gsap.min.js"></script>
-    {css}
-  </head>
-  <body>
-    <div id="root" data-composition-id="main" data-start="0" data-duration="{total}" data-width="{W}" data-height="{H}">{body}
-    </div>
-    {js}{extra}
-  </body>
-</html>''')
+    page = composer.compose(jobdir(job), p, length, ratio=ratio, audio_html=audio, extra=extra)
+    open(os.path.join(jobdir(job), name), 'w', encoding='utf-8').write(page)
     return cut
 
 
@@ -724,7 +461,8 @@ def worker_claim():
     for _, j, rev in sorted(cands):
         if set_status(j, rev, state='running', pct=0):
             page = open(os.path.join(jobdir(j), 'index.html'), encoding='utf-8').read()
-            files = ['index.html'] + sorted(set(re.findall(r'(?:src|href)="(assets/[^"?#]+)"', page)))
+            refs = re.findall(r'(?:src|href)="(assets/[^"?#]+)"|url\(\'(assets/[^\'?#]+)\'\)', page)
+            files = ['index.html'] + sorted({a or b for a, b in refs})
             return jsonify(job=j, rev=rev, files=files)
     return jsonify(job=None)
 

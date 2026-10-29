@@ -6,6 +6,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt waitress
 COPY . .
+# 영상용 한글 글꼴(오픈 라이선스) 내려받기: 렌더할 때 쓰인 글자만 잘라 영상에 넣는다
+RUN python tools/get_fonts.py
 ENV PYTHONUNBUFFERED=1
 EXPOSE 5000
 CMD ["waitress-serve", "--host=0.0.0.0", "--port=5000", "--threads=8", "--max-request-body-size=2147483648", "server:app"]
