@@ -1,3 +1,5 @@
 jobs/
 .env
 __pycache__/
+worker/config.json
+worker/server.txt

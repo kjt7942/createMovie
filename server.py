@@ -1,7 +1,8 @@
 """홍보영상 제작 웹앱. 업로드(폴더 포함) -> Gemini가 장면/사진 배정 -> HyperFrames 렌더.
-실행: GEMINI_API_KEY 환경변수(또는 이 폴더의 .env)를 준비하고 `python server.py` -> http://localhost:5000"""
-import base64, html, itertools, json, os, re, shutil, subprocess, threading, time, urllib.error, urllib.request, uuid
-from flask import Flask, jsonify, request, send_from_directory
+실행: GEMINI_API_KEY 환경변수(또는 이 폴더의 .env)를 준비하고 `python server.py` -> http://localhost:5000
+WORKER_TOKEN을 설정하면 렌더링을 이 서버에서 하지 않고 대기열에 넣어 두고, PC의 렌더 워커(worker/)가 가져가 처리한다."""
+import base64, hmac, html, itertools, json, os, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid
+from flask import Flask, abort, jsonify, request, send_from_directory
 from PIL import Image, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -11,18 +12,25 @@ COLORS = ['#ff6b4a', '#ffc93c', '#3ddc97']
 MAX_VISION = 40  # Gemini에 보여줄 사진 수 상한(초과분은 균등 샘플링)
 
 app = Flask(__name__, static_folder='static', static_url_path='')
-app.config['MAX_CONTENT_LENGTH'] = 300 * 1024 * 1024
-_render_lock = threading.Lock()  # ponytail: 렌더 1건씩만. 동시 사용자가 늘면 작업 큐로 교체
-_status = {}
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 워커가 올리는 완성 영상(최대 10분)까지 받는다
+_render_lock = threading.Lock()  # 서버에서 직접 렌더할 때 1건씩만
+_state_lock = threading.Lock()
+
+
+def env(name):
+    k = os.environ.get(name)
+    p = os.path.join(HERE, '.env')
+    if not k and os.path.exists(p):
+        m = re.search(r'^%s=(.+)$' % name, open(p, encoding='utf-8').read(), re.M)
+        k = m and m.group(1).strip().strip('"\'')
+    return k
 
 
 def api_key():
-    k = os.environ.get('GEMINI_API_KEY')
-    p = os.path.join(HERE, '.env')
-    if not k and os.path.exists(p):
-        m = re.search(r'^GEMINI_API_KEY=(.+)$', open(p, encoding='utf-8').read(), re.M)
-        k = m and m.group(1).strip().strip('"\'')
-    return k
+    return env('GEMINI_API_KEY')
+
+
+WORKER_TOKEN = env('WORKER_TOKEN')  # 있으면 '워커 모드': 렌더링은 PC 워커가 한다
 
 
 def jobdir(job):
@@ -409,24 +417,43 @@ def build(job, p, length, audio, name='index.html', extra='', ratio='landscape',
     return cut
 
 
-def run_render(job):
-    s = _status[job]
+# 렌더 상태는 작업 폴더의 render.json에 둔다(서버를 재시작해도 대기열이 남도록).
+# {state: queued|running|done|error, pct, log, rev(렌더 요청마다 새 값), queued_at, updated}
+def get_status(job):
+    return load_json(job, 'render.json') or {'state': 'none', 'pct': 0}
+
+
+def set_status(job, only_rev=None, **kw):
+    """only_rev를 주면 그 렌더 요청이 아직 최신일 때만 바꾼다(사용자가 그 사이 다시 렌더를 누른 경우 무시)."""
+    with _state_lock:
+        s = get_status(job)
+        if only_rev is not None and s.get('rev') != only_rev:
+            return False
+        s.update(kw, updated=time.time())
+        f = os.path.join(jobdir(job), 'render.json')
+        with open(f + '.tmp', 'w', encoding='utf-8') as fp:
+            json.dump(s, fp, ensure_ascii=False)
+        os.replace(f + '.tmp', f)
+        return True
+
+
+def run_render(job, rev):
     with _render_lock:
-        s.update(state='running', pct=0)
+        set_status(job, rev, state='running', pct=0)
         out = os.path.join(jobdir(job), 'output.mp4')
         if os.path.exists(out):
             os.remove(out)
         pr = subprocess.Popen([shutil.which('npx') or 'npx', '-y', 'hyperframes', 'render', '-o', 'output.mp4'], cwd=jobdir(job),
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
-        tail = []
+        tail, pct = [], 0
         for line in pr.stdout:
             mm = re.search(r'"pct":(\d+)', line)
-            if mm:
-                s['pct'] = int(mm.group(1))
+            if mm and int(mm.group(1)) != pct:
+                pct = int(mm.group(1)); set_status(job, rev, pct=pct)
             tail = (tail + [line.rstrip()])[-8:]
         pr.wait()
         ok = pr.returncode == 0 and os.path.exists(out)
-        s.update(state='done' if ok else 'error', pct=100 if ok else s['pct'], log='\n'.join(tail))
+        set_status(job, rev, state='done' if ok else 'error', pct=100 if ok else pct, log='\n'.join(tail))
 
 
 def build_from_request(b, **kw):
@@ -449,9 +476,104 @@ def render():
         return jsonify(error='구성 정보가 올바르지 않습니다: %s' % e), 400
     except RuntimeError as e:
         return jsonify(error=str(e)), 502
-    _status[b['job']] = {'state': 'queued', 'pct': 0}
-    threading.Thread(target=run_render, args=(b['job'],), daemon=True).start()
+    rev = uuid.uuid4().hex[:8]
+    set_status(b['job'], state='queued', pct=0, log='', rev=rev, queued_at=time.time())
+    if not WORKER_TOKEN:
+        threading.Thread(target=run_render, args=(b['job'], rev), daemon=True).start()
     return jsonify(ok=True, cut=cut)
+
+
+# ---------- PC 렌더 워커용 API (WORKER_TOKEN 설정 시) ----------
+# 워커가 몇 초마다 /claim으로 일감을 묻고(PC -> 서버 방향이라 공유기 포트 개방 불필요),
+# 받은 파일로 렌더한 뒤 /progress로 진행률, /done으로 완성 영상을 올린다.
+STALE = 600  # 진행 보고가 이 시간(초) 동안 없으면 워커가 꺼진 것으로 보고 다시 대기열로
+_worker = {'seen': 0.0, 'name': ''}
+
+
+def worker_auth():
+    if not WORKER_TOKEN:
+        abort(404)
+    got = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    if not hmac.compare_digest(got.encode(), WORKER_TOKEN.encode()):
+        abort(401)
+    _worker.update(seen=time.time(), name=urllib.parse.unquote(request.headers.get('X-Worker-Name', ''))[:40])
+
+
+def worker_online():
+    return time.time() - _worker['seen'] < 30
+
+
+@app.get('/api/worker/ping')
+def worker_ping():  # 설치할 때 주소·토큰이 맞는지 확인용
+    worker_auth()
+    return jsonify(ok=True)
+
+
+@app.get('/worker.zip')
+def worker_zip():
+    """PC 렌더 워커 설치 파일 묶음. 이 서버 주소를 미리 넣어 두어 설치 때 토큰만 입력하면 된다."""
+    if not WORKER_TOKEN:
+        abort(404)
+    import io, zipfile
+    buf, src = io.BytesIO(), os.path.join(HERE, 'worker')
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(os.listdir(src)):
+            if f != 'config.json' and os.path.isfile(os.path.join(src, f)):
+                z.write(os.path.join(src, f), 'createMovie-worker/' + f)
+        z.writestr('createMovie-worker/server.txt', request.host_url.rstrip('/'))
+    buf.seek(0)
+    return app.response_class(buf.read(), mimetype='application/zip',
+                              headers={'Content-Disposition': 'attachment; filename=createMovie-worker.zip'})
+
+
+@app.post('/api/worker/claim')
+def worker_claim():
+    worker_auth()
+    now, cands = time.time(), []
+    for j in os.listdir(JOBS) if os.path.isdir(JOBS) else []:
+        if not re.fullmatch(r'[0-9a-f]{12}', j):
+            continue
+        s = get_status(j)
+        if s['state'] == 'queued' or (s['state'] == 'running' and now - s.get('updated', 0) > STALE):
+            cands.append((s.get('queued_at', 0), j, s['rev']))
+    for _, j, rev in sorted(cands):
+        if set_status(j, rev, state='running', pct=0):
+            page = open(os.path.join(jobdir(j), 'index.html'), encoding='utf-8').read()
+            files = ['index.html'] + sorted(set(re.findall(r'(?:src|href)="(assets/[^"?#]+)"', page)))
+            return jsonify(job=j, rev=rev, files=files)
+    return jsonify(job=None)
+
+
+@app.post('/api/worker/progress/<job>')
+def worker_progress(job):
+    worker_auth()
+    ok = set_status(job, request.args.get('rev', ''), pct=max(0, min(99, int((request.json or {}).get('pct', 0)))))
+    return jsonify(ok=ok, cancel=not ok)  # cancel: 사용자가 다시 렌더를 눌러 이 작업은 필요 없어짐
+
+
+@app.post('/api/worker/done/<job>')
+def worker_done(job):
+    worker_auth()
+    rev = request.args.get('rev', '')
+    if get_status(job).get('rev') != rev:
+        return jsonify(ok=False, cancel=True)
+    tmp = os.path.join(jobdir(job), 'output.part')
+    with open(tmp, 'wb') as f:
+        shutil.copyfileobj(request.stream, f, 1024 * 1024)
+    if os.path.getsize(tmp) < 1000:
+        os.remove(tmp)
+        set_status(job, rev, state='error', log='워커가 보낸 영상 파일이 비어 있습니다.')
+        return jsonify(ok=False), 400
+    os.replace(tmp, os.path.join(jobdir(job), 'output.mp4'))
+    set_status(job, rev, state='done', pct=100, log='')
+    return jsonify(ok=True)
+
+
+@app.post('/api/worker/fail/<job>')
+def worker_fail(job):
+    worker_auth()
+    set_status(job, request.args.get('rev', ''), state='error', log=str((request.json or {}).get('log', ''))[-3000:])
+    return jsonify(ok=True)
 
 
 # 브라우저 미리보기: HyperFrames 엔진 대신 data-start/duration에 맞춰 장면을 보이고 숨기며 GSAP 타임라인을 재생한다.
@@ -556,8 +678,10 @@ def project(job):
 
 @app.get('/api/status/<job>')
 def status(job):
-    jobdir(job)
-    return jsonify(_status.get(job, {'state': 'none', 'pct': 0}))
+    s = {k: v for k, v in get_status(job).items() if k in ('state', 'pct', 'log')}
+    if WORKER_TOKEN:  # 화면에서 'PC 렌더 프로그램이 꺼져 있음'을 안내할 수 있게
+        s.update(mode='worker', worker_online=worker_online(), worker_name=_worker['name'])
+    return jsonify(s)
 
 
 @app.get('/jobs/<job>/<path:f>')
@@ -570,6 +694,8 @@ def index():
     return app.send_static_file('index.html')
 
 
+os.makedirs(JOBS, exist_ok=True)
+
 if __name__ == '__main__':
-    os.makedirs(JOBS, exist_ok=True)
-    app.run(port=5000, threaded=True)
+    # HOST=0.0.0.0 이면 같은 네트워크의 다른 기기(폰 등)에서 접속 가능
+    app.run(host=env('HOST') or '127.0.0.1', port=int(env('PORT') or 5000), threaded=True)

@@ -1,0 +1,19 @@
+# Synology: Container Manager > 프로젝트 > 생성 > 이 파일 선택
+services:
+  createmovie:
+    build: .
+    container_name: createmovie
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WORKER_TOKEN=${WORKER_TOKEN}   # PC 워커와 맞출 비밀 값(아무 긴 문자열)
+      - TZ=Asia/Seoul
+    volumes:
+      - ./jobs:/app/jobs                # 프로젝트·영상 보관(컨테이너를 다시 만들어도 유지)
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"                   # 다른 NAS 서비스가 느려지지 않게
+          memory: 1g

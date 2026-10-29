@@ -1,0 +1,6 @@
+jobs/
+.git/
+.env
+__pycache__/
+worker/config.json
+test_*
