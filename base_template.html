@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      :root {
+        --ground: #1b1a24;
+        --ink: #ffffff;
+        --coral: #ff6b4a;
+        --sun: #ffc93c;
+        --mint: #3ddc97;
+        --font-display: "Noto Sans CJK KR", "Noto Sans KR", sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--ground); }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; font-family: var(--font-display); color: var(--ink); }
+
+      .scene { position: absolute; inset: 0; overflow: hidden; background: var(--ground); }
+      .photo { position: absolute; inset: -4%; width: 108%; height: 108%; object-fit: cover; transform-origin: 50% 50%; }
+      .shade { position: absolute; inset: 0; background:
+        linear-gradient(90deg, rgba(15,12,25,.82) 0%, rgba(15,12,25,.45) 38%, rgba(15,12,25,0) 70%),
+        linear-gradient(0deg, rgba(15,12,25,.55) 0%, rgba(15,12,25,0) 40%); }
+      .num { position: absolute; left: 110px; top: 150px; font-size: 220px; font-weight: 900; line-height: 1; letter-spacing: -0.04em; color: transparent; -webkit-text-stroke: 3px rgba(255,255,255,.85); }
+      .bar { position: absolute; left: 116px; top: 650px; width: 120px; height: 10px; background: var(--c, var(--coral)); transform-origin: 0 50%; }
+      .ttl { position: absolute; left: 110px; top: 690px; font-size: 104px; font-weight: 900; letter-spacing: -0.04em; text-shadow: 0 6px 30px rgba(0,0,0,.45); }
+      .sub { position: absolute; left: 114px; top: 830px; font-size: 44px; font-weight: 500; letter-spacing: -0.02em; color: rgba(255,255,255,.92); }
+      .tag { position: absolute; right: 90px; top: 70px; font-size: 30px; font-weight: 700; letter-spacing: .06em; padding: 12px 26px; border-radius: 40px; background: rgba(255,255,255,.14); border: 2px solid rgba(255,255,255,.4); }
+
+      #intro { background: radial-gradient(circle at 70% 30%, #3a2a4d 0%, var(--ground) 62%); }
+      #intro .photo { opacity: .28; filter: blur(6px); }
+      .blob { position: absolute; border-radius: 50%; }
+      .yr { position: absolute; left: 0; width: 1920px; text-align: center; top: 250px; font-size: 64px; font-weight: 700; letter-spacing: .5em; color: var(--sun); }
+      .big { position: absolute; left: 0; width: 1920px; text-align: center; top: 340px; font-size: 230px; font-weight: 900; letter-spacing: -0.05em; line-height: 1.05; }
+      .big span.o { color: var(--coral); }
+      .hanja { position: absolute; left: 0; width: 1920px; text-align: center; top: 620px; font-size: 52px; font-weight: 500; letter-spacing: .3em; color: rgba(255,255,255,.78); }
+      .org { position: absolute; left: 0; width: 1920px; text-align: center; top: 800px; font-size: 54px; font-weight: 700; letter-spacing: -0.01em; }
+      .org b { color: var(--sun); font-weight: 900; }
+
+      #outro { background: radial-gradient(circle at 30% 70%, #4a2f42 0%, var(--ground) 65%); }
+      #outro .photo { opacity: .35; }
+      .o1 { position: absolute; left: 0; width: 1920px; text-align: center; top: 330px; font-size: 120px; font-weight: 900; letter-spacing: -0.04em; }
+      .o2 { position: absolute; left: 0; width: 1920px; text-align: center; top: 500px; font-size: 120px; font-weight: 900; letter-spacing: -0.04em; color: var(--sun); }
+      .o3 { position: absolute; left: 0; width: 1920px; text-align: center; top: 760px; font-size: 50px; font-weight: 500; letter-spacing: .02em; color: rgba(255,255,255,.9); }
+
+      .panel { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; z-index: 50; transform: translateX(-100%); }
+      #progress { position: absolute; left: 0; bottom: 0; height: 8px; width: 1920px; background: var(--coral); transform-origin: 0 50%; transform: scaleX(0); z-index: 60; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="30" data-width="1920" data-height="1080">
+
+      <div id="intro" class="scene clip" data-start="0" data-duration="4.4" data-track-index="0">
+        <img class="photo" src="assets/01.jpg" alt="" />
+        <div class="blob" id="b1" style="width:620px;height:620px;left:-160px;top:-140px;background:var(--coral);opacity:.9"></div>
+        <div class="blob" id="b2" style="width:380px;height:380px;right:-90px;bottom:-110px;background:var(--sun);opacity:.95"></div>
+        <div class="blob" id="b3" style="width:160px;height:160px;right:300px;top:90px;background:var(--mint);opacity:.9"></div>
+        <div class="yr" id="yr">2026</div>
+        <div class="big" id="big"><span class="o">온</span>통가족축제</div>
+        <div class="hanja" id="hanja">溫 · 通 &nbsp; 가족이 통하는 문경</div>
+        <div class="org" id="org"><b>문경시가족센터</b> 사업 소개</div>
+      </div>
+
+      <div id="s1" class="scene clip" data-start="3.6" data-duration="3.35" data-track-index="1" style="--c:#ff6b4a">
+        <img class="photo" src="assets/09.jpg" alt="" /><div class="shade"></div>
+        <div class="num">01</div><div class="bar"></div>
+        <div class="ttl">교육지원사업</div><div class="sub">결혼이민자 한국어교육 · 우리동네 아빠교실</div><div class="tag">문경시가족센터</div>
+      </div>
+      <div id="s2" class="scene clip" data-start="6.35" data-duration="3.35" data-track-index="1" style="--c:#ffc93c">
+        <img class="photo" src="assets/02.jpg" alt="" /><div class="shade"></div>
+        <div class="num">02</div><div class="bar"></div>
+        <div class="ttl">돌봄지원사업</div><div class="sub">공동육아나눔터 · 아이돌봄 · 열린맘</div><div class="tag">문경시가족센터</div>
+      </div>
+      <div id="s3" class="scene clip" data-start="9.1" data-duration="3.35" data-track-index="1" style="--c:#3ddc97">
+        <img class="photo" src="assets/03.jpg" alt="" /><div class="shade"></div>
+        <div class="num">03</div><div class="bar"></div>
+        <div class="ttl">자녀지원사업</div><div class="sub">기초학습 · 진로설계 · 멘토링</div><div class="tag">문경시가족센터</div>
+      </div>
+      <div id="s4" class="scene clip" data-start="11.85" data-duration="3.35" data-track-index="1" style="--c:#ff6b4a">
+        <img class="photo" src="assets/04.jpg" alt="" /><div class="shade"></div>
+        <div class="num">04</div><div class="bar"></div>
+        <div class="ttl">문화체험사업</div><div class="sub">다문화 자조모임 · 지역맞춤형 프로그램</div><div class="tag">문경시가족센터</div>
+      </div>
+      <div id="s5" class="scene clip" data-start="14.6" data-duration="3.35" data-track-index="1" style="--c:#ffc93c">
+        <img class="photo" src="assets/05.jpg" alt="" /><div class="shade"></div>
+        <div class="num">05</div><div class="bar"></div>
+        <div class="ttl">아이천국 두레마을</div><div class="sub">육아친화 마을 · 자생공동체 활동</div><div class="tag">문경시가족센터</div>
+      </div>
+      <div id="s6" class="scene clip" data-start="17.35" data-duration="3.35" data-track-index="1" style="--c:#3ddc97">
+        <img class="photo" src="assets/06.jpg" alt="" /><div class="shade"></div>
+        <div class="num">06</div><div class="bar"></div>
+        <div class="ttl">어린이 물놀이터</div><div class="sub">온 가족이 함께 즐기는 여름</div><div class="tag">문경시가족센터</div>
+      </div>
+      <div id="s7" class="scene clip" data-start="20.1" data-duration="3.35" data-track-index="1" style="--c:#ff6b4a">
+        <img class="photo" src="assets/07.jpg" alt="" /><div class="shade"></div>
+        <div class="num">07</div><div class="bar"></div>
+        <div class="ttl">연계사업</div><div class="sub">지역사회와 함께하는 체험부스 · 캠페인</div><div class="tag">문경시가족센터</div>
+      </div>
+      <div id="s8" class="scene clip" data-start="22.85" data-duration="3.35" data-track-index="1" style="--c:#ffc93c">
+        <img class="photo" src="assets/08.jpg" alt="" /><div class="shade"></div>
+        <div class="num">08</div><div class="bar"></div>
+        <div class="ttl">희망이음사업</div><div class="sub">외국인주민 한국어교실 · 지역사회공동체 지원</div><div class="tag">문경시가족센터</div>
+      </div>
+
+      <div id="outro" class="scene clip" data-start="25.6" data-duration="4.4" data-track-index="2">
+        <img class="photo" src="assets/10.jpg" alt="" />
+        <div class="blob" id="ob1" style="width:520px;height:520px;right:-120px;top:-140px;background:var(--coral);opacity:.9"></div>
+        <div class="blob" id="ob2" style="width:300px;height:300px;left:-80px;bottom:-90px;background:var(--mint);opacity:.9"></div>
+        <div class="o1" id="o1">문경시가족센터가</div>
+        <div class="o2" id="o2">항상 함께 하겠습니다</div>
+        <div class="o3" id="o3">2026 온통가족축제에 오신 모든 가족을 환영합니다</div>
+      </div>
+
+      <div class="panel" id="p_a" style="background:var(--coral)"></div>
+      <div class="panel" id="p_b" style="background:var(--sun)"></div>
+      <div class="panel" id="p_c" style="background:var(--mint)"></div>
+      <div id="progress"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const starts = [3.6, 6.35, 9.1, 11.85, 14.6, 17.35, 20.1, 22.85];
+
+      tl.fromTo("#b1", { scale: 0 }, { scale: 1, duration: 1.0, ease: "back.out(1.6)" }, 0.05);
+      tl.fromTo("#b2", { scale: 0 }, { scale: 1, duration: 1.0, ease: "back.out(1.6)" }, 0.2);
+      tl.fromTo("#b3", { scale: 0 }, { scale: 1, duration: 0.8, ease: "back.out(2)" }, 0.35);
+      tl.fromTo("#yr", { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.3);
+      tl.fromTo("#big", { opacity: 0, y: 70, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power4.out" }, 0.5);
+      tl.fromTo("#hanja", { opacity: 0 }, { opacity: 1, duration: 0.7 }, 1.2);
+      tl.fromTo("#org", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 1.6);
+      tl.to("#intro .photo", { scale: 1.08, duration: 4.4, ease: "none" }, 0);
+      tl.to("#b1", { x: 40, y: 30, duration: 4, ease: "sine.inOut" }, 1);
+
+      const panels = ["#p_a", "#p_b", "#p_c"];
+      const wipes = [
+        ["inset(0 0 0 100%)", "inset(0 0 0 0%)"],
+        ["circle(0% at 50% 50%)", "circle(150% at 50% 50%)"],
+        ["inset(100% 0 0 0)", "inset(0% 0 0 0)"],
+        ["inset(0 50% 0 50%)", "inset(0 0% 0 0%)"],
+      ];
+      starts.forEach((s, i) => {
+        const id = "#s" + (i + 1);
+        const d = 3.35;
+        if (i % 2 === 0) {
+          const p = panels[(i / 2) % panels.length];
+          tl.fromTo(p, { x: "-100%" }, { x: "100%", duration: 0.9, ease: "power2.inOut" }, s - 0.35);
+        } else {
+          const w = wipes[((i - 1) / 2) % wipes.length];
+          tl.fromTo(id, { clipPath: w[0] }, { clipPath: w[1], duration: 0.85, ease: "power3.inOut" }, s);
+        }
+        const zoomIn = i % 2 === 0;
+        tl.fromTo(id + " .photo", { scale: zoomIn ? 1.0 : 1.14, x: zoomIn ? 0 : 24 }, { scale: zoomIn ? 1.14 : 1.0, x: zoomIn ? -24 : 0, duration: d, ease: "none" }, s);
+        tl.fromTo(id + " .num", { opacity: 0, x: -60 }, { opacity: 1, x: 0, duration: 0.6, ease: "power3.out" }, s + 0.35);
+        tl.fromTo(id + " .bar", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out" }, s + 0.5);
+        tl.fromTo(id + " .ttl", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.6, ease: "power4.out" }, s + 0.55);
+        tl.fromTo(id + " .sub", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" }, s + 0.8);
+        tl.fromTo(id + " .tag", { opacity: 0, y: -20 }, { opacity: 1, y: 0, duration: 0.5 }, s + 0.9);
+      });
+
+      const os = 25.6;
+      tl.fromTo("#outro", { clipPath: "circle(0% at 50% 50%)" }, { clipPath: "circle(150% at 50% 50%)", duration: 0.9, ease: "power3.inOut" }, os);
+      tl.fromTo("#ob1", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.5);
+      tl.fromTo("#ob2", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.6);
+      tl.fromTo("#o1", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.7, ease: "power4.out" }, os + 0.7);
+      tl.fromTo("#o2", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.7, ease: "power4.out" }, os + 1.0);
+      tl.fromTo("#o3", { opacity: 0 }, { opacity: 1, duration: 0.7 }, os + 1.6);
+      tl.to("#outro .photo", { scale: 1.08, duration: 4.4, ease: "none" }, os);
+      tl.to("#root", { opacity: 0, duration: 0.5, ease: "power1.in" }, 29.5);
+
+      tl.fromTo("#progress", { scaleX: 0 }, { scaleX: 1, duration: 30, ease: "none" }, 0);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
