@@ -927,7 +927,8 @@ function renderPlan() {
 
 // ---------- 화면 전환 미리보기 (server.py TIMELINE_JS의 trans()와 같은 움직임) ----------
 const TR = {mix: '다양하게 섞기', panel: '컬러 패널', slide: '밀어내기', fade: '페이드', zoom: '줌인', blur: '흐림',
-            wipe: '닦아내기', 'wipe-up': '아래에서 위로', split: '가운데서 열기', circle: '원형 확장', diagonal: '대각선'};
+            wipe: '닦아내기', 'wipe-up': '아래에서 위로', split: '가운데서 열기', circle: '원형 확장', diagonal: '대각선',
+            whip: '휙 넘기기', flash: '플래시', spin: '회전 줌'};
 const TR_KEYS = Object.keys(TR).slice(1);
 const trSel = (v, i) => `<select class="trsel" data-tr="${i}" aria-label="전환 효과" title="이 장면이 들어올 때의 전환 효과">
   <option value="">전환: 전체 설정</option>${TR_KEYS.map(k => `<option value="${k}" ${v === k ? 'selected' : ''}>${TR[k]}</option>`).join('')}</select>`;
@@ -953,6 +954,9 @@ function previewTr(k) {
       : kind === 'slide' ? [{opacity: 1, transform: 'translateX(100%)'}, {opacity: 1, transform: 'none'}]
       : kind === 'zoom' ? [{opacity: 0, transform: 'scale(1.25)'}, {opacity: 1, transform: 'none'}]
       : kind === 'blur' ? [{opacity: 0, filter: 'blur(10px)'}, {opacity: 1, filter: 'blur(0)'}]
+      : kind === 'whip' ? [{opacity: 1, transform: 'translateX(100%)', filter: 'blur(8px)'}, {opacity: 1, transform: 'none', filter: 'blur(0)'}]
+      : kind === 'flash' ? [{opacity: 1, transform: 'scale(1.2)', filter: 'brightness(4)'}, {opacity: 1, transform: 'none', filter: 'brightness(1)'}]
+      : kind === 'spin' ? [{opacity: 0, transform: 'scale(.4) rotate(-10deg)'}, {opacity: 1, transform: 'none'}]
       : [{opacity: 0}, {opacity: 1}];
     trAnims.push(b.animate(K, o));
     if (kind === 'panel') trAnims.push(p.animate([{transform: 'translateX(-100%)'}, {transform: 'translateX(100%)'}], {...o, duration: 900}));
