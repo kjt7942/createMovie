@@ -5,6 +5,8 @@
 글꼴은 fonts/ 의 원본에서 영상에 쓰인 글자만 잘라 assets/fonts/ 에 넣는다(렌더 PC에 글꼴 설치 불필요)."""
 import hashlib, html, json, os, re
 
+import beats
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONTS_DIR = os.path.join(HERE, 'fonts')
 
@@ -36,7 +38,7 @@ TIMELINE_JS = '''<script>
       const tl = gsap.timeline({ paused: true });
       // 없는 요소(설명이 빈 장면 등)는 건너뛴다
       const F = (t, a, b, at) => { if (typeof t === "string" && !document.querySelector(t)) return; tl.fromTo(t, a, b, at); };
-      const starts = __STARTS__, d = __DUR__, os = __OS__, total = __TOTAL__, TR = __TRS__, TYPES = __TYPES__;
+      const starts = __STARTS__, durs = __DURS__, os = __OS__, total = __TOTAL__, TR = __TRS__, TYPES = __TYPES__;
       const ST = "__STYLE__", SP = __SPEED__;            // 스타일, 전환 속도 배율
       const K = { classic: 1, pop: 0.9, cinematic: 1.45, kinetic: 0.6 }[ST];   // 글자 등장 시점 배율
       const CLIP = {
@@ -100,10 +102,10 @@ TIMELINE_JS = '''<script>
       F("#b3", { scale: 0 }, { scale: 1, duration: 0.8, ease: "back.out(2)" }, 0.35);
       tl.to("#b1", { x: 40, y: 30, duration: 4, ease: "sine.inOut" }, 1);
       body("#yr", 0.3 * K); head("#big", 0.5 * K); body("#hanja", 1.2 * K); body("#org", 1.6 * K);
-      tl.to("#intro .photo", { scale: 1.08, duration: 4.4, ease: "none" }, 0);
+      tl.to("#intro .photo", { scale: 1.08, duration: starts[0] + 0.8, ease: "none" }, 0);
 
       starts.forEach((s, i) => {
-        const id = "#s" + (i + 1), T = TYPES[i], at = x => s + x * K;
+        const id = "#s" + (i + 1), T = TYPES[i], at = x => s + x * K, d = durs[i];
         trans(TR[i], id, s, i);
         F(id + " .tag", { opacity: 0 }, { opacity: 1, duration: 0.5 }, at(0.9));
         F(id + " .vline", { scaleY: 0 }, { scaleY: 1, duration: 0.6, ease: "power3.out" }, at(0.2));
@@ -141,7 +143,7 @@ TIMELINE_JS = '''<script>
       F("#ob1", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.5);
       F("#ob2", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.6);
       head("#o1", os + 0.7 * K); head("#o2", os + 1.0 * K); body("#o3", os + 1.6 * K);
-      tl.to("#outro .photo", { scale: 1.08, duration: 4.4, ease: "none" }, os);
+      tl.to("#outro .photo", { scale: 1.08, duration: total - os, ease: "none" }, os);
       tl.to("#root", { opacity: 0, duration: 0.5, ease: "power1.in" }, total - 0.5);
       F("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
 
@@ -507,8 +509,9 @@ def font_css(job_dir, style, plan):
 
 
 # ---------------------------------------------------------------- 조립
-def compose(job_dir, p, length, ratio='landscape', audio_html='', extra=''):
-    """plan(p)으로 HyperFrames 컴포지션 HTML 문자열을 만든다."""
+def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timing=None):
+    """plan(p)으로 HyperFrames 컴포지션 HTML 문자열을 만든다.
+    timing=(장면 시작 목록, 엔딩 시작): 없으면 균등 배분. 박자 맞춤은 beats.snap_times()가 만든다."""
     e = html.escape
     style = p.get('style') if p.get('style') in STYLES else 'classic'
     st = STYLES[style]
@@ -522,14 +525,15 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra=''):
     tl_ = max(1, len(p['title']))
     big_fs = min(190, int(940 / tl_)) if portrait else (230 if tl_ <= 8 else 170)
     n = len(p['scenes'])
-    step = (length - 8) / n; dur = round(step + 0.6, 2)
-    starts = [round(3.6 + step * i, 2) for i in range(n)]
-    os_ = round(3.6 + step * n, 2); total = float(length)
+    starts, os_ = timing or beats.snap_times(length, n)
+    nexts = starts[1:] + [os_]
+    durs = [round(b - a + 0.6, 2) for a, b in zip(starts, nexts)]   # 다음 장면 전환과 0.6초 겹침
+    total = float(length)
     org = e(p['org'])
-    scenes = ''.join(scene_html(i, s, org, starts[i], dur, st['colors'], seed) for i, s in enumerate(p['scenes']))
+    scenes = ''.join(scene_html(i, s, org, starts[i], durs[i], st['colors'], seed) for i, s in enumerate(p['scenes']))
     o = p['outro']
     body = f'''
-      <div id="intro" class="scene clip" data-start="0" data-duration="4.4" data-track-index="0">
+      <div id="intro" class="scene clip" data-start="0" data-duration="{round(starts[0] + 0.8, 2)}" data-track-index="0">
         <img class="photo" src="assets/{p['intro_photo']}.jpg" alt="" />
         <div class="blob" id="b1" style="width:620px;height:620px;left:-160px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="b2" style="width:380px;height:380px;right:-90px;bottom:-110px;background:var(--sun);opacity:.95"></div>
@@ -539,7 +543,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra=''):
         <div class="hanja" id="hanja">{e(p['tagline'])}</div>
         <div class="org" id="org"><b>{org}</b></div>
       </div>{scenes}
-      <div id="outro" class="scene clip" data-start="{os_}" data-duration="4.4" data-track-index="2">
+      <div id="outro" class="scene clip" data-start="{os_}" data-duration="{round(total - os_, 2)}" data-track-index="2">
         <img class="photo" src="assets/{p['outro_photo']}.jpg" alt="" />
         <div class="blob" id="ob1" style="width:520px;height:520px;right:-120px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="ob2" style="width:300px;height:300px;left:-80px;bottom:-90px;background:var(--mint);opacity:.9"></div>
@@ -554,7 +558,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra=''):
     mix = st['mix']
     pick = lambda i, v: v if v in TRANSITIONS else glob if glob in TRANSITIONS else mix[(i + seed) % len(mix)]
     trs = [pick(i, s.get('tr')) for i, s in enumerate(p['scenes'])] + [pick(n, p.get('outro_tr'))]
-    js = (TIMELINE_JS.replace('__STARTS__', json.dumps(starts)).replace('__DUR__', str(dur)).replace('__OS__', str(os_))
+    js = (TIMELINE_JS.replace('__STARTS__', json.dumps(starts)).replace('__DURS__', json.dumps(durs)).replace('__OS__', str(os_))
           .replace('__TOTAL__', str(total)).replace('__TRS__', json.dumps(trs)).replace('__STYLE__', style)
           .replace('__SPEED__', str(st['speed']))
           .replace('__TYPES__', json.dumps([s.get('type') if s.get('type') in SCENE_TYPES else 'title' for s in p['scenes']])))

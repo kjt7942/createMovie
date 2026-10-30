@@ -4,6 +4,7 @@ WORKER_TOKEN을 설정하면 렌더링을 이 서버에서 하지 않고 대기�
 import base64, hmac, html, itertools, json, os, random, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 from flask import Flask, abort, jsonify, request, send_from_directory
 from PIL import Image, ImageOps
+import beats
 import composer
 from composer import SCENE_TYPES, STYLES, scene_speech
 
@@ -74,10 +75,11 @@ def upload():
             parts = path.split('/')
             m['photos'].append({'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else ''})
         elif ext == '.mp3':
-            f.save(os.path.join(d, 'assets', 'bgm.mp3')); m['audio'] = os.path.basename(path)
+            f.save(os.path.join(d, 'assets', 'bgm.mp3')); m['audio'] = os.path.basename(path); m.pop('beats', None)
         else:
             skipped.append(path)
     save_meta(job, m)
+    song_beats(job, m)
     return jsonify(job=job, **m, skipped=skipped)
 
 
@@ -201,7 +203,7 @@ def plan():
         revise = ('세로(9:16) 영상이다. title은 6자 이내, 장면 ttl은 8자 이내, 마무리 1·2행은 10자 이내로 짧게 쓰고, '
                   '사진은 사람이나 주요 대상이 가운데에 있는 것을 우선 골라라(좌우가 잘린다).\n')
     if (b.get('narr') or {}).get('on'):  # 내레이션: 장면 길이에 맞는 글자 수 예산을 준다
-        sl = narr_slots(length, lo); cap = lambda a, b_: max(4, int((b_ - a - 0.6) * CPS))
+        sl = narr_slots(*beats.snap_times(length, lo), length); cap = lambda a, b_: max(4, int((b_ - a - 0.6) * CPS))
         revise += ('내레이션(성우가 읽는 말)도 써라. intro_narr(공백 제외 %d자 이내), 각 장면에 narr(공백 제외 %d자 이내), '
                    'outro_narr(공백 제외 %d자 이내, 감사·마무리 인사) 필드를 반드시 모두 추가한다. 화면 글자를 그대로 읽지 말고 듣기 편한 존댓말 한 문장으로.\n'
                    % (cap(*sl[0]), cap(*sl[1]), cap(*sl[-1])))
@@ -254,11 +256,11 @@ VOICES = {'sunhi': 'ko-KR-SunHiNeural', 'injoon': 'ko-KR-InJoonNeural', 'hyunsu'
 CPS = 4.6  # 보통 속도에서 초당 글자 수(공백 제외). edge-tts 한국어 3종 실측 4.6~4.9
 
 
-def narr_slots(length, n):
+def narr_slots(starts, os_, length):
     """말할 수 있는 구간 [(시작, 끝)]: 오프닝, 장면 1..n, 엔딩. 장면 전환 직후 0.4초 뒤 시작, 다음 장면 0.1초 전 끝."""
-    st = (length - 8) / n
-    return ([(0.5, 3.5)] + [(3.6 + st * i + 0.4, 3.6 + st * (i + 1) - 0.1) for i in range(n)]
-            + [(3.6 + st * n + 0.5, length - 0.3)])
+    nexts = starts[1:] + [os_]
+    return ([(0.5, starts[0] - 0.1)] + [(a + 0.4, b - 0.1) for a, b in zip(starts, nexts)]
+            + [(os_ + 0.5, length - 0.3)])
 
 
 def narr_texts(p):  # 내레이션이 비어 있으면 화면 문구로 대신 읽는다
@@ -293,9 +295,9 @@ def tts_many(job, items):
     return [(name, duration(path)) for name, path in out]
 
 
-def make_narration(job, p, length, narr):
+def make_narration(job, p, length, narr, timing):
     """구간마다 음성을 만들고, 구간보다 길면 최대 +40%까지 빠르게 다시 만든다. 그래도 길면 구간 끝에서 잘린다."""
-    slots, texts = narr_slots(length, len(p['scenes'])), narr_texts(p)
+    slots, texts = narr_slots(*timing, length), narr_texts(p)
     v, base = narr.get('voice', 'sunhi'), int(narr.get('rate', 0))
     keep = [i for i, t in enumerate(texts) if t.strip()]
     res = dict(zip(keep, tts_many(job, [(texts[i], v, base) for i in keep])))
@@ -324,14 +326,37 @@ def tts():
 
 # ---------- 렌더 ----------
 # 화면 전환 종류. 'mix'(기본)는 MIX 순서대로 돌아가며 섞는다. 장면별 지정(scene.tr)이 전체 설정보다 우선.
+def song_beats(job, m=None):
+    """배경음악 박자 분석 결과(meta.json에 저장해 두고 재사용). 음악이 없거나 분석할 수 없으면 None."""
+    m = m or meta_of(job)
+    if not m.get('audio'):
+        return None
+    if 'beats' not in m:
+        try:
+            m['beats'] = beats.analyze(os.path.join(jobdir(job), 'assets', 'bgm.mp3'))
+        except Exception:
+            m['beats'] = None
+        save_meta(job, m)
+    return m['beats']
+
+
+def scene_timing(job, length, n, audio):
+    """장면 시작 시각과 엔딩 시작. audio.sync가 켜져 있으면 장면 전환을 음악 박자에 맞춘다."""
+    b = song_beats(job) if audio and audio.get('sync') else None
+    if not b:
+        return beats.snap_times(length, n)
+    return beats.snap_times(length, n, b['beats'], b['down'], audio['start'], audio['dur'])
+
+
 def build(job, p, length, audio, name='index.html', extra='', ratio='landscape', narr=None):
     """내레이션을 만들고 composer로 HTML을 조립해 작업 폴더에 쓴다. 잘린 내레이션 구간 목록을 돌려준다."""
-    clips, cut = make_narration(job, p, length, narr) if narr and narr.get('on') else ([], [])
+    timing = scene_timing(job, length, len(p['scenes']), audio)
+    clips, cut = make_narration(job, p, length, narr, timing) if narr and narr.get('on') else ([], [])
     audio = (f'<audio id="bgm" src="assets/bgm.mp3" data-start="0" data-duration="{audio["dur"]}" data-media-start="{audio["start"]}" '
              f'data-track-index="9" data-volume="{0.25 if clips else 0.7}" data-fade-in="1" data-fade-out="2"></audio>') if audio else ''
     audio += ''.join(f'\n      <audio id="nr{i}" src="assets/{f}" data-start="{s}" data-duration="{d}" data-track-index="{20 + i}" data-volume="1"></audio>'
                      for i, (s, d, f) in enumerate(clips))  # 내레이션이 있으면 배경음악을 0.25로 낮춘다
-    page = composer.compose(jobdir(job), p, length, ratio=ratio, audio_html=audio, extra=extra)
+    page = composer.compose(jobdir(job), p, length, ratio=ratio, audio_html=audio, extra=extra, timing=timing)
     open(os.path.join(jobdir(job), name), 'w', encoding='utf-8').write(page)
     return cut
 
@@ -380,7 +405,7 @@ def build_from_request(b, **kw):
     length = max(15, min(600, int(b.get('length', 30))))
     a = b.get('audio') if m['audio'] else None  # {start, dur}: 음악에서 쓸 구간(초)
     if a:
-        a = {'start': max(0.0, float(a['start'])), 'dur': max(1.0, min(float(a['dur']), length))}
+        a = {'start': max(0.0, float(a['start'])), 'dur': max(1.0, min(float(a['dur']), length)), 'sync': a.get('sync', True) is not False}
     ids = [x['id'] for x in m['photos']]
     pick = lambda v: v if v in ids else ids[0]
     b['plan']['scenes'] = [normalize_scene(s, ids, pick) for s in b['plan']['scenes']]
@@ -595,7 +620,8 @@ def projects():
 
 @app.get('/api/project/<job>')
 def project(job):
-    return jsonify(meta=meta_of(job), plan=load_json(job, 'plan.json'), settings=load_json(job, 'project.json', {}),
+    m = meta_of(job); song_beats(job, m)
+    return jsonify(meta=m, plan=load_json(job, 'plan.json'), settings=load_json(job, 'project.json', {}),
                    video=os.path.exists(os.path.join(jobdir(job), 'output.mp4')))
 
 

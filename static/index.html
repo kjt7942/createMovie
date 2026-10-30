@@ -397,6 +397,7 @@
         <label class="field"><span>구간 길이</span><input class="input mono" id="aLen" readonly></label>
       </div>
       <label class="switch" style="margin-top:16px"><input type="checkbox" id="lenAuto">영상 길이를 음악 구간에 맞추기</label>
+      <label class="switch" style="margin-top:10px"><input type="checkbox" id="beatSync" checked>장면 전환을 음악 박자에 맞추기 <small id="bpmInfo" class="mono" style="color:var(--mute);margin-left:6px"></small></label>
       <div class="warn" id="mWarn"></div>
       <audio id="aud" preload="auto" hidden></audio>
     </div>
@@ -554,7 +555,7 @@ function summary() {
 let saveT = 0, loading = false, pendingSel = null;
 function settings() {
   return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
-          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2)};
+          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked};
 }
 function dirty() {   // 바뀔 때마다 1.2초 뒤 자동 저장
   if (!job || loading) return;
@@ -592,7 +593,7 @@ async function openProject(j) {
   const nr = st.narr || {}; $('#narrOn').checked = !!nr.on; $('#narrOpts').hidden = !nr.on;
   press('#voice', $$('#voice button').find(b => b.dataset.v === nr.voice) || $('#voice button'));
   press('#rate', $$('#rate button').find(b => +b.dataset.rate === nr.rate) || $('#rate button'));
-  $('#length').value = st.length || 30; $('#lenAuto').checked = !!st.lenAuto;
+  $('#length').value = st.length || 30; $('#lenAuto').checked = !!st.lenAuto; $('#beatSync').checked = st.beatSync !== false;
   pendingSel = st.aEnd ? {s: st.aStart || 0, e: st.aEnd} : null; audioKey = '';
   $('#video').removeAttribute('src'); $('#e1').textContent = $('#e2').textContent = $('#e3').textContent = $('#e4').textContent = $('#note').textContent = '';
   reached = plan ? 3 : 2;
@@ -607,7 +608,7 @@ async function openProject(j) {
 }
 function newProject() {
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
-  $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false;
+  $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true;
   press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true;
   $('#saved').textContent = ''; $('#projDlg').open && $('#projDlg').close();
   renderAssets(); go(1);
@@ -700,8 +701,8 @@ $$('#ratio button').forEach(b => b.onclick = () => { press('#ratio', b); applyRa
 const CPS = 4.6;   // server.py와 같은 값: 보통 속도 초당 글자 수(공백 제외)
 const narrSel = () => ({on: $('#narrOn').checked, voice: $('#voice [aria-pressed="true"]').dataset.v, rate: +$('#rate [aria-pressed="true"]').dataset.rate});
 function narrSlots(L, n) {   // server.py narr_slots()와 같은 계산
-  const st = (L - 8) / n;
-  return [[0.5, 3.5], ...Array.from({length: n}, (_, i) => [3.6 + st * i + 0.4, 3.6 + st * (i + 1) - 0.1]), [3.6 + st * n + 0.5, L - 0.3]];
+  const {starts, os} = snapTimes(L, n), nexts = [...starts.slice(1), os];
+  return [[0.5, starts[0] - 0.1], ...starts.map((a, i) => [a + 0.4, nexts[i] - 0.1]), [os + 0.5, L - 0.3]];
 }
 const narrCap = ([a, b]) => Math.max(4, Math.floor((b - a - 0.6) * CPS * (1 + narrSel().rate / 100)));
 function narrUI() {
@@ -746,6 +747,8 @@ async function initMusic() {
     const mx = Math.max(...peaks) || 1; peaks = peaks.map(v => v / mx);
   } catch { $('#mInfo').textContent = '파형을 불러오지 못했습니다'; await new Promise(r => { $('#aud').onloadedmetadata = r; }); aDur = $('#aud').duration; }
   $('#mInfo').textContent = `${meta.audio} · 전체 ${fmt(aDur)}`; $('#axisEnd').textContent = fmt(aDur);
+  $('#bpmInfo').textContent = meta.beats ? `${Math.round(meta.beats.bpm)} BPM 감지` : '박자를 찾지 못했어요(균등하게 배분)';
+  $('#beatSync').disabled = !meta.beats;
   if (pendingSel) { aStart = pendingSel.s; aEnd = pendingSel.e; pendingSel = null; }   // 저장된 구간 복원
   else { aStart = 0; aEnd = Math.min(aDur, lengthSec()); }
   syncLen();
@@ -784,6 +787,7 @@ function syncLen(from) {   // 음악 구간과 영상 길이를 서로 맞춘다
   summary();
 }
 $('#lenAuto').onchange = () => { if ($('#lenAuto').checked) aEnd = aDur; syncLen(); };
+$('#beatSync').onchange = () => { dirty(); if (plan && step === 3) renderPlan(); };
 $('#aStart').addEventListener('input', () => { aStart = +$('#aStart').value || 0; syncLen('input'); });
 $('#aEnd').addEventListener('input', () => { aEnd = +$('#aEnd').value || 0; syncLen('input'); });
 $('#aStart').addEventListener('change', () => syncLen()); $('#aEnd').addEventListener('change', () => syncLen());
@@ -816,9 +820,35 @@ $('#aPrev').onclick = () => {
     $('#playhead').style.left = (a.currentTime / aDur * 100) + '%'; raf = requestAnimationFrame(tick);
   })();
 };
-function audioSel() {  // 서버로 보낼 음악 구간: 시작 위치와 쓸 길이
+function audioSel() {  // 서버로 보낼 음악 구간: 시작 위치, 쓸 길이, 박자 맞춤
   if (!meta.audio) return null;
-  return {start: +aStart.toFixed(2), dur: Math.max(1, Math.min(lengthSec(), aDur - aStart))};
+  return {start: +aStart.toFixed(2), dur: Math.max(1, Math.min(lengthSec(), aDur - aStart)), sync: $('#beatSync').checked};
+}
+// 장면 시작 시각: beats.py snap_times()와 같은 규칙(장면 전환을 가까운 비트, 가능하면 마디 첫 박으로)
+function snapTimes(L, n) {
+  const step = (L - 8) / n, base = [...Array.from({length: n}, (_, i) => 3.6 + step * i), 3.6 + step * n];
+  const r2 = v => Math.round(v * 100) / 100, plain = {starts: base.slice(0, n).map(r2), os: r2(base[n])};
+  const b = meta.beats, a = audioSel();
+  if (!b || !a || !a.sync || n < 1) return plain;
+  const end = Math.min(L, a.dur);
+  const bt = b.beats.map((t, k) => [t - a.start, (k - b.down) % 4 === 0]).filter(([t]) => t > 0.5 && t < end - 0.3);
+  if (bt.length < 4) return plain;
+  const ib = bt.slice(1).map(([t], i) => t - bt[i][0]).sort((x, y) => x - y)[Math.floor(bt.length / 2)];
+  const out = []; let last = 0;
+  base.forEach((want, k) => {
+    let lo = last + (k ? 2.4 : 2.6); const hi = k === n ? L - 3.4 : want + Math.min(step * 0.45, 2 * ib);
+    if (k === n) lo = Math.max(lo, L - 5.6);
+    const c = bt.filter(([t]) => t >= lo && t <= hi && Math.abs(t - want) <= Math.max(step * 0.45, ib));
+    let pick;
+    if (!c.length) pick = lo <= hi ? Math.min(Math.max(want, lo), hi) : want;
+    else {
+      const by = arr => arr.reduce((m, x) => Math.abs(x[0] - want) < Math.abs(m[0] - want) ? x : m);
+      const near = by(c), downs = c.filter(x => x[1] && Math.abs(x[0] - want) <= Math.abs(near[0] - want) + ib * 1.01);
+      pick = (downs.length ? by(downs) : near)[0];
+    }
+    out.push(pick); last = pick;
+  });
+  return {starts: out.slice(0, n).map(r2), os: r2(out[n])};
 }
 
 // ---------- ②→③ AI 구성 ----------
@@ -857,9 +887,9 @@ $('#revise').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isCo
 $$('#reviseChips .chip').forEach(c => c.onclick = () => { $('#revise').value = c.textContent; $('#revise').focus(); });
 
 // ---------- ③ 스토리보드 ----------
-function timing() {   // server.py build()와 같은 계산: 오프닝 0~4.4, 장면 3.6부터 step 간격, 엔딩 4.4초
-  const L = lengthSec(), n = plan.scenes.length, st = (L - 8) / n;
-  return {L, st, starts: plan.scenes.map((_, i) => 3.6 + st * i), os: 3.6 + st * n};
+function timing() {   // server.py scene_timing()과 같은 계산. ends: 다음 장면 전환 시각
+  const L = lengthSec(), n = plan.scenes.length, {starts, os} = snapTimes(L, n);
+  return {L, st: (os - starts[0]) / n, starts, os, ends: [...starts.slice(1), os]};
 }
 // 장면 유형 (server.py normalize_scene / composer.py와 같은 이름)
 const TYPES = {title: '기본', collage: '사진 콜라주', stat: '큰 숫자', quote: '인용·후기', list: '목록·일정'};
@@ -901,8 +931,8 @@ function sceneFields(s, i) {
 }
 function renderPlan() {
   applyRatio();
-  const {L, st, starts, os} = timing(), used = new Set(plan.scenes.map(s => s.photo));
-  const blocks = [{k:'intro', w:3.6, t:'오프닝', io:1}, ...plan.scenes.map((s, i) => ({k:i, w:st, t:`${i + 1} ${sName(s)}`})), {k:'outro', w:4.4, t:'엔딩', io:1}];
+  const {L, st, starts, os, ends} = timing(), used = new Set(plan.scenes.map(s => s.photo));
+  const blocks = [{k:'intro', w:starts[0], t:'오프닝', io:1}, ...plan.scenes.map((s, i) => ({k:i, w:ends[i] - starts[i], t:`${i + 1} ${sName(s)}`})), {k:'outro', w:L - os, t:'엔딩', io:1}];
   $('#ruler').innerHTML = blocks.map(b => `<button style="flex:${b.w}" class="${b.io ? 'io' : ''}" data-jump="${b.k}" title="${esc(b.t)}">${esc(b.t)}</button>`).join('');
   const marks = L <= 40 ? 5 : L <= 120 ? 15 : 60, ticks = [];
   for (let t = 0; t < L - marks * 0.4; t += marks) ticks.push(t); ticks.push(L);
@@ -920,7 +950,7 @@ function renderPlan() {
       <div class="card-b">${f('title', '제목', 't')}${f('tagline', '슬로건', 's')}${f('org', '기관명', 's')}${f('year', '연도', 's')}
         ${nbox('data-k="intro_narr"', plan.intro_narr, caps[0], '비워 두면 제목과 슬로건을 읽어요')}</div></article>` +
     plan.scenes.map((s, i) => `<article class="card" data-card="${i}" data-i="${i}">
-      <div style="position:relative">${photoBtn(s.photo, sType(s) === 'collage' ? i + ':0' : i)}${tc(starts[i], starts[i] + st + 0.6)}<span class="kind">${TYPES[sType(s)]}</span></div>
+      <div style="position:relative">${photoBtn(s.photo, sType(s) === 'collage' ? i + ':0' : i)}${tc(starts[i], ends[i] + 0.6)}<span class="kind">${TYPES[sType(s)]}</span></div>
       <div class="card-b"><div class="trow"><select class="trsel typesel" data-type="${i}" aria-label="${i + 1}번 장면 유형">${Object.entries(TYPES).map(([k, v]) =>
           `<option value="${k}" ${sType(s) === k ? 'selected' : ''}>유형: ${v}</option>`).join('')}</select>
         <button class="btn sm vbtn" data-var="${i}" title="같은 유형의 다른 배치로 바꾸기">배치 ${'AB'[sVar(s, i)]} ⇄</button></div>
@@ -1091,9 +1121,9 @@ $('#toPreview').onclick = async () => {
   b.disabled = false; b.innerHTML = old;
   if (r.error) { $('#e3').textContent = r.error; return; }
   $('#stageMsg').textContent = '미리보기를 준비하는 중…';
-  const {L, st} = timing();
-  $('#prevRuler').innerHTML = [{t: 0, w: 3.6, n: '오프닝', io: 1}, ...plan.scenes.map((s, i) => ({t: 3.6 + st * i + 0.01, w: st, n: `${i + 1} ${s.ttl}`})),
-    {t: L - 4.4, w: 4.4, n: '엔딩', io: 1}].map(x => `<button style="flex:${x.w}" class="${x.io ? 'io' : ''}" data-t="${x.t}" title="${esc(x.n)}">${esc(x.n)}</button>`).join('');
+  const {L, starts, os, ends} = timing();
+  $('#prevRuler').innerHTML = [{t: 0, w: starts[0], n: '오프닝', io: 1}, ...plan.scenes.map((s, i) => ({t: starts[i] + 0.01, w: ends[i] - starts[i], n: `${i + 1} ${sName(s)}`})),
+    {t: os + 0.01, w: L - os, n: '엔딩', io: 1}].map(x => `<button style="flex:${x.w}" class="${x.io ? 'io' : ''}" data-t="${x.t}" title="${esc(x.n)}">${esc(x.n)}</button>`).join('');
   $$('#prevRuler [data-t]').forEach(x => x.onclick = () => { const p = P(); p && p.seek(+x.dataset.t); });
   $('#prevDlg').showModal(); fitStage();
   const f = $('#prevFrame');

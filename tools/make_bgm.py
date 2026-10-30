@@ -1,29 +1,32 @@
-"""축제 홍보영상용 경쾌한 배경음악(128BPM) 합성. 저작권 걱정 없는 자체 제작 음원.
+"""사용: python tools/make_bgm.py 출력.wav [길이초=40] [BPM=128]
+축제 홍보영상용 경쾌한 배경음악(128BPM) 합성. 저작권 걱정 없는 자체 제작 음원.
 구성: 인트로(필터 열리며 빌드업) -> 메인(킥·클랩·하이햇·베이스·아르페지오·코드) -> 엔딩(마지막 히트 후 여운)"""
 import sys
 import numpy as np
 
 SR = 44100
-BPM = 128
+BPM = float(sys.argv[3]) if len(sys.argv) > 3 else 128
 BEAT = 60 / BPM
 DUR = float(sys.argv[2]) if len(sys.argv) > 2 else 40.0
 N = int(SR * (DUR + 1.5))
 rng = np.random.default_rng(7)
 mix = np.zeros((N, 2))
+kicks = np.zeros((N, 2))   # 킥은 사이드체인(누르기)에서 빼서 박자가 또렷하게
 
 
 def t_(sec):
     return np.arange(int(SR * sec)) / SR
 
 
-def put(sig, start, gain=1.0, pan=0.0):
+def put(sig, start, gain=1.0, pan=0.0, buf=None):
     i = int(start * SR)
     if i >= N:
         return
     sig = sig[:N - i]
     l, r = np.sqrt(0.5 * (1 - pan)), np.sqrt(0.5 * (1 + pan))
-    mix[i:i + len(sig), 0] += sig * gain * l
-    mix[i:i + len(sig), 1] += sig * gain * r
+    b = mix if buf is None else buf
+    b[i:i + len(sig), 0] += sig * gain * l
+    b[i:i + len(sig), 1] += sig * gain * r
 
 
 def lowpass(x, cutoff):
@@ -114,7 +117,7 @@ for b in range(bars):
         tb = t0 + k * BEAT
         if tb >= END:
             break
-        put(kick(), tb, 0.95)
+        put(kick(), tb, 0.95, buf=kicks)
         if k in (1, 3):
             put(clap(), tb, 0.55)
         put(hat(True), tb + BEAT / 2, 0.22, pan=0.3)
@@ -130,7 +133,7 @@ riser = rng.standard_normal(len(t)) * (t / INTRO) ** 3
 put(riser - lowpass(riser, 2000), 0, 0.25)
 
 # 엔딩: 큰 히트 + 길게 울리는 코드
-put(kick(), END, 1.1); put(clap(), END, 0.7)
+put(kick(), END, 1.1, buf=kicks); put(clap(), END, 0.7)
 put(pad([48, 60, 64, 67, 72], 3.4, 2600), END, 0.9)
 put(bass(24, 2.5), END, 0.7)
 
@@ -140,6 +143,7 @@ for b in np.arange(INTRO, END, BEAT):
     i = int(b * SR); L = int(0.18 * SR)
     duck[i:i + L] *= 1 - 0.35 * np.exp(-np.arange(L) / SR * 18)
 mix[:, 0] *= duck; mix[:, 1] *= duck
+mix += kicks
 
 mix = mix[:int(SR * DUR)]
 mix = np.tanh(mix / np.max(np.abs(mix)) * 1.6) * 0.89   # 부드러운 리미터
