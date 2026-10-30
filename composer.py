@@ -198,7 +198,7 @@ SCENE_CSS = '''<style>
       .grid.g4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
       .t-collage .ttl { top: auto; bottom: 108px; left: 60px; font-size: 84px; }
       .t-collage .sub { top: auto; bottom: 46px; left: 64px; font-size: 40px; }
-      .t-collage .cbar { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: var(--c); transform-origin: 0 50%; }
+      .t-collage .cbar { position: absolute; left: 0; right: 0; bottom: 18px; height: 6px; background: var(--c); transform-origin: 0 50%; }
 
       .dim { position: absolute; inset: 0; background: rgba(15,12,25,.8); }
       .t-stat .photo { filter: blur(10px); }
