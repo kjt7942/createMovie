@@ -6,6 +6,7 @@ from flask import Flask, abort, jsonify, request, send_from_directory
 from PIL import Image, ImageOps
 import beats
 import composer
+import media
 from composer import SCENE_TYPES, STYLES, scene_speech
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,9 +72,28 @@ def upload():
                 skipped.append(path); continue
             pid = f'p{len(m["photos"]) + 1:03d}'
             im.thumbnail((1920, 1920)); im.save(os.path.join(d, 'assets', pid + '.jpg'), quality=88)
+            ar = round(im.width / im.height, 4)
             im.thumbnail((384, 384)); im.save(os.path.join(d, 'thumbs', pid + '.jpg'), quality=75)
             parts = path.split('/')
-            m['photos'].append({'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else ''})
+            m['photos'].append(analyze_photo(d, {'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else '', 'ar': ar}))
+        elif ext in media.VIDEO_EXT:
+            vid = f'v{len(m["photos"]) + 1:03d}'
+            src = os.path.join(d, 'assets', vid + ext)
+            f.save(src)
+            info = media.probe(src)
+            if not info:
+                os.remove(src); skipped.append(path); continue
+            dur, vw, vh = info
+            try:   # 포스터(앞부분)·끝 장면: AI가 보고 고르는 사진, 동영상이 끝난 뒤 멈춰 보일 장면
+                media.frame(src, min(1.0, dur / 3), os.path.join(d, 'assets', vid + '.jpg'))
+                media.frame(src, max(0, dur - 0.15), os.path.join(d, 'assets', vid + '_end.jpg'))
+                im = Image.open(os.path.join(d, 'assets', vid + '.jpg')); im.thumbnail((384, 384))
+                im.save(os.path.join(d, 'thumbs', vid + '.jpg'), quality=75)
+            except Exception:
+                os.remove(src); skipped.append(path); continue
+            parts = path.split('/')
+            m['photos'].append(analyze_photo(d, {'id': vid, 'kind': 'video', 'src': vid + ext, 'dur': round(dur, 2), 'path': path,
+                                                 'folder': parts[-2] if len(parts) > 1 else '', 'ar': round(vw / vh, 4)}))
         elif ext == '.mp3':
             f.save(os.path.join(d, 'assets', 'bgm.mp3')); m['audio'] = os.path.basename(path); m.pop('beats', None)
         else:
@@ -81,6 +101,49 @@ def upload():
     save_meta(job, m)
     song_beats(job, m)
     return jsonify(job=job, **m, skipped=skipped)
+
+
+def analyze_photo(d, p):
+    """얼굴 위치와 화면 자를 때의 초점을 기록(세로 자동 맞춤·얼굴 모자이크용). 감지기가 없으면 건너뜀."""
+    if 'faces' not in p:
+        fb = media.faces(os.path.join(d, 'assets', p['id'] + '.jpg'))
+        if fb is not None:
+            p['faces'] = fb; p['focus'] = media.focus(fb)
+    if 'ar' not in p:
+        with Image.open(os.path.join(d, 'assets', p['id'] + '.jpg')) as im:
+            p['ar'] = round(im.width / im.height, 4)
+    return p
+
+
+def ensure_media(job, m=None):
+    """예전 프로젝트: 얼굴·비율 정보가 없으면 지금 채운다."""
+    m = m or meta_of(job)
+    if any('ar' not in p or ('faces' not in p and media._detector()) for p in m['photos']):
+        m['photos'] = [analyze_photo(jobdir(job), p) for p in m['photos']]
+        save_meta(job, m)
+    return m
+
+
+@app.post('/api/logo')
+def logo():
+    """기관 로고 올리기/지우기. 흰 배경은 자동으로 투명하게."""
+    job = request.form.get('job', '')
+    m = meta_of(job); dst = os.path.join(jobdir(job), 'assets', 'logo.png')
+    if request.form.get('remove'):
+        if os.path.exists(dst):
+            os.remove(dst)
+        m.pop('logo', None)
+    else:
+        f = request.files.get('file')
+        if not f:
+            return jsonify(error='로고 파일이 없습니다.'), 400
+        try:
+            w, h = media.clean_logo(f.stream, dst)
+        except Exception:
+            return jsonify(error='이미지를 읽지 못했습니다. PNG나 JPG로 올려 주세요.'), 400
+        m['logo'] = {'w': w, 'h': h, 't': int(time.time())}
+    save_meta(job, m)
+    return jsonify(logo=m.get('logo'))
 
 
 @app.post('/api/reset')
@@ -218,7 +281,8 @@ def plan():
     parts = [{'text': PROMPT % (composer.STYLE_HINT, lo, hi, b.get('mood', '밝고 경쾌하게'), length, style_rule,
                                 b.get('brief') or '(없음)', b.get('org') or '', revise)}]
     for p in photos:
-        parts.append({'text': f'사진id={p["id"]} 폴더={p["folder"] or "(없음)"} 파일={p["path"].split("/")[-1]}'})
+        kind = f' 동영상({p["dur"]:.0f}초, 아래는 한 장면)' if p.get('kind') == 'video' else ''
+        parts.append({'text': f'사진id={p["id"]}{kind} 폴더={p["folder"] or "(없음)"} 파일={p["path"].split("/")[-1]}'})
         parts.append({'inline_data': {'mime_type': 'image/jpeg', 'data': base64.b64encode(
             open(os.path.join(jobdir(b['job']), 'thumbs', p['id'] + '.jpg'), 'rb').read()).decode()}})
     try:
@@ -310,7 +374,7 @@ def make_narration(job, p, length, narr, timing):
         name, d = res[i]; room = slots[i][1] - slots[i][0]
         if d > room + 0.05:
             cut.append('오프닝' if i == 0 else '엔딩' if i == len(slots) - 1 else f'{i}번 장면')
-        clips.append((round(slots[i][0], 2), round(min(d, room), 2), name))
+        clips.append((round(slots[i][0], 2), round(min(d, room), 2), name, texts[i]))
     return clips, cut
 
 
@@ -349,14 +413,20 @@ def scene_timing(job, length, n, audio):
 
 
 def build(job, p, length, audio, name='index.html', extra='', ratio='landscape', narr=None):
-    """내레이션을 만들고 composer로 HTML을 조립해 작업 폴더에 쓴다. 잘린 내레이션 구간 목록을 돌려준다."""
+    """내레이션을 만들고 composer로 HTML을 조립해 작업 폴더에 쓴다. 잘린 내레이션 구간 목록을 돌려준다.
+    plan의 blur(얼굴 모자이크)·logo('corner'|'ends'|'off'), narr.sub(자막)를 반영한다."""
+    m = ensure_media(job)
     timing = scene_timing(job, length, len(p['scenes']), audio)
     clips, cut = make_narration(job, p, length, narr, timing) if narr and narr.get('on') else ([], [])
     audio = (f'<audio id="bgm" src="assets/bgm.mp3" data-start="0" data-duration="{audio["dur"]}" data-media-start="{audio["start"]}" '
              f'data-track-index="9" data-volume="{0.25 if clips else 0.7}" data-fade-in="1" data-fade-out="2"></audio>') if audio else ''
     audio += ''.join(f'\n      <audio id="nr{i}" src="assets/{f}" data-start="{s}" data-duration="{d}" data-track-index="{20 + i}" data-volume="1"></audio>'
-                     for i, (s, d, f) in enumerate(clips))  # 내레이션이 있으면 배경음악을 0.25로 낮춘다
-    page = composer.compose(jobdir(job), p, length, ratio=ratio, audio_html=audio, extra=extra, timing=timing)
+                     for i, (s, d, f, _) in enumerate(clips))  # 내레이션이 있으면 배경음악을 0.25로 낮춘다
+    logo = p.get('logo', 'corner') if m.get('logo') else None
+    caps = [(s, d, t) for s, d, _, t in clips] if narr and narr.get('sub', True) else None
+    page = composer.compose(jobdir(job), p, length, ratio=ratio, audio_html=audio, extra=extra, timing=timing,
+                            photos={x['id']: x for x in m['photos']}, blur=bool(p.get('blur')),
+                            logo=None if logo == 'off' else logo, captions=caps)
     open(os.path.join(jobdir(job), name), 'w', encoding='utf-8').write(page)
     return cut
 
@@ -381,23 +451,48 @@ def set_status(job, only_rev=None, **kw):
         return True
 
 
+def finalize(job, rev):
+    """새로 받은 영상(.new)을 제자리로 옮기고 썸네일을 만든 뒤 완료 처리. 하나라도 없으면 오류."""
+    s = get_status(job)
+    if s.get('rev') != rev:
+        return False
+    d = jobdir(job)
+    for o in s.get('outputs') or [{'out': 'output.mp4', 'thumb': 'thumb.jpg'}]:
+        new = os.path.join(d, o['out'] + '.new')
+        if not os.path.exists(new):
+            set_status(job, rev, state='error', log=f'{o["out"]} 영상을 받지 못했습니다.'); return False
+        os.replace(new, os.path.join(d, o['out']))
+        try:   # 썸네일: 오프닝 제목이 다 보이는 순간
+            media.frame(os.path.join(d, o['out']), s.get('thumb_t', 3.0), os.path.join(d, o['thumb']))
+        except Exception:
+            pass
+    set_status(job, rev, state='done', pct=100, log='')
+    return True
+
+
 def run_render(job, rev):
+    """PC 한 대로 쓸 때: 이 서버에서 직접 렌더한다(출력이 여러 개면 차례로)."""
     with _render_lock:
         set_status(job, rev, state='running', pct=0)
-        out = os.path.join(jobdir(job), 'output.mp4')
-        if os.path.exists(out):
-            os.remove(out)
-        pr = subprocess.Popen([shutil.which('npx') or 'npx', '-y', 'hyperframes', 'render', '-o', 'output.mp4'], cwd=jobdir(job),
-                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+        outs = get_status(job).get('outputs') or []
         tail, pct = [], 0
-        for line in pr.stdout:
-            mm = re.search(r'"pct":(\d+)', line)
-            if mm and int(mm.group(1)) != pct:
-                pct = int(mm.group(1)); set_status(job, rev, pct=pct)
-            tail = (tail + [line.rstrip()])[-8:]
-        pr.wait()
-        ok = pr.returncode == 0 and os.path.exists(out)
-        set_status(job, rev, state='done' if ok else 'error', pct=100 if ok else pct, log='\n'.join(tail))
+        for k, o in enumerate(outs):
+            part = o['out'] + '.new.mp4'
+            pr = subprocess.Popen([shutil.which('npx') or 'npx', '-y', 'hyperframes', 'render', '-c', o['html'], '-o', part],
+                                  cwd=jobdir(job), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+            for line in pr.stdout:
+                mm = re.search(r'"pct":(\d+)', line)
+                if mm:
+                    v = int((k + int(mm.group(1)) / 100) / len(outs) * 100)
+                    if v != pct:
+                        pct = v; set_status(job, rev, pct=min(99, pct))
+                tail = (tail + [line.rstrip()])[-8:]
+            pr.wait()
+            path = os.path.join(jobdir(job), part)
+            if pr.returncode != 0 or not os.path.exists(path):
+                set_status(job, rev, state='error', pct=pct, log='\n'.join(tail)); return
+            os.replace(path, os.path.join(jobdir(job), o['out'] + '.new'))
+        finalize(job, rev)
 
 
 def build_from_request(b, **kw):
@@ -409,22 +504,35 @@ def build_from_request(b, **kw):
     ids = [x['id'] for x in m['photos']]
     pick = lambda v: v if v in ids else ids[0]
     b['plan']['scenes'] = [normalize_scene(s, ids, pick) for s in b['plan']['scenes']]
-    return build(b['job'], b['plan'], length, a, ratio='portrait' if b.get('ratio') == 'portrait' else 'landscape',
-                 narr=b.get('narr'), **kw)
+    ratio = kw.pop('ratio', None) or ('portrait' if b.get('ratio') == 'portrait' else 'landscape')
+    return build(b['job'], b['plan'], length, a, ratio=ratio, narr=b.get('narr'), **kw)
+
+
+def outputs_for(ratio):
+    """요청한 화면 비율 -> 만들 영상 목록. '둘 다'면 가로(output.mp4)와 세로(output_portrait.mp4)."""
+    if ratio == 'both':
+        return [{'ratio': 'landscape', 'html': 'index.html', 'out': 'output.mp4', 'thumb': 'thumb.jpg'},
+                {'ratio': 'portrait', 'html': 'portrait.html', 'out': 'output_portrait.mp4', 'thumb': 'thumb_portrait.jpg'}]
+    return [{'ratio': 'portrait' if ratio == 'portrait' else 'landscape', 'html': 'index.html', 'out': 'output.mp4', 'thumb': 'thumb.jpg'}]
 
 
 @app.post('/api/render')
 def render():
     b = request.json
+    outs = outputs_for(b.get('ratio'))
     try:
-        cut = build_from_request(b)
+        cut = []
+        for o in outs:
+            cut = build_from_request(b, name=o['html'], ratio=o['ratio'])
         save_json(b['job'], 'plan.json', b['plan'])  # 렌더 시 화면에서 고친 구성도 저장
+        st0 = scene_timing(b['job'], max(15, min(600, int(b.get('length', 30)))), len(b['plan']['scenes']),
+                           b.get('audio') if meta_of(b['job'])['audio'] else None)[0][0]
     except (KeyError, IndexError, ValueError) as e:
         return jsonify(error='구성 정보가 올바르지 않습니다: %s' % e), 400
     except RuntimeError as e:
         return jsonify(error=str(e)), 502
     rev = uuid.uuid4().hex[:8]
-    set_status(b['job'], state='queued', pct=0, log='', rev=rev, queued_at=time.time())
+    set_status(b['job'], state='queued', pct=0, log='', rev=rev, queued_at=time.time(), outputs=outs, thumb_t=round(max(1.5, st0 - 0.3), 2))
     if not WORKER_TOKEN:
         threading.Thread(target=run_render, args=(b['job'], rev), daemon=True).start()
     return jsonify(ok=True, cut=cut)
@@ -485,10 +593,14 @@ def worker_claim():
             cands.append((s.get('queued_at', 0), j, s['rev']))
     for _, j, rev in sorted(cands):
         if set_status(j, rev, state='running', pct=0):
-            page = open(os.path.join(jobdir(j), 'index.html'), encoding='utf-8').read()
-            refs = re.findall(r'(?:src|href)="(assets/[^"?#]+)"|url\(\'(assets/[^\'?#]+)\'\)', page)
-            files = ['index.html'] + sorted({a or b for a, b in refs})
-            return jsonify(job=j, rev=rev, files=files)
+            outs = get_status(j).get('outputs') or outputs_for('landscape')
+            refs = set()
+            for o in outs:
+                page = open(os.path.join(jobdir(j), o['html']), encoding='utf-8').read()
+                refs |= {a or b or c for a, b, c in re.findall(
+                    r'(?:src|href)="(assets/[^"?#]+)"|url\(\'(assets/[^\'?#]+)\'\)|poster="(assets/[^"?#]+)"', page)}
+            files = [o['html'] for o in outs] + sorted(refs)
+            return jsonify(job=j, rev=rev, files=files, outputs=[{'html': o['html'], 'out': o['out']} for o in outs])
     return jsonify(job=None)
 
 
@@ -499,22 +611,41 @@ def worker_progress(job):
     return jsonify(ok=ok, cancel=not ok)  # cancel: 사용자가 다시 렌더를 눌러 이 작업은 필요 없어짐
 
 
-@app.post('/api/worker/done/<job>')
-def worker_done(job):
-    worker_auth()
-    rev = request.args.get('rev', '')
-    if get_status(job).get('rev') != rev:
-        return jsonify(ok=False, cancel=True)
-    tmp = os.path.join(jobdir(job), 'output.part')
+def _receive(job, rev, out):
+    """워커가 올린 영상을 <out>.new 로 받아 둔다(완료 때 한꺼번에 교체)."""
+    tmp = os.path.join(jobdir(job), out + '.part')
     with open(tmp, 'wb') as f:
         shutil.copyfileobj(request.stream, f, 1024 * 1024)
     if os.path.getsize(tmp) < 1000:
         os.remove(tmp)
         set_status(job, rev, state='error', log='워커가 보낸 영상 파일이 비어 있습니다.')
+        return False
+    os.replace(tmp, os.path.join(jobdir(job), out + '.new'))
+    return True
+
+
+@app.post('/api/worker/upload/<job>')
+def worker_upload(job):
+    worker_auth()
+    rev, out = request.args.get('rev', ''), request.args.get('out', '')
+    s = get_status(job)
+    if s.get('rev') != rev:
+        return jsonify(ok=False, cancel=True)
+    if out not in [o['out'] for o in s.get('outputs') or outputs_for('landscape')]:
+        return jsonify(ok=False, error='알 수 없는 출력 파일'), 400
+    return jsonify(ok=_receive(job, rev, out))
+
+
+@app.post('/api/worker/done/<job>')
+def worker_done(job):
+    """모든 영상을 올린 뒤 호출. (예전 워커는 본문에 영상 하나를 실어 보낸다 -> output.mp4)"""
+    worker_auth()
+    rev = request.args.get('rev', '')
+    if get_status(job).get('rev') != rev:
+        return jsonify(ok=False, cancel=True)
+    if (request.content_length or 0) > 1000 and not _receive(job, rev, 'output.mp4'):
         return jsonify(ok=False), 400
-    os.replace(tmp, os.path.join(jobdir(job), 'output.mp4'))
-    set_status(job, rev, state='done', pct=100, log='')
-    return jsonify(ok=True)
+    return jsonify(ok=finalize(job, rev))
 
 
 @app.post('/api/worker/fail/<job>')
@@ -530,14 +661,16 @@ PREVIEW_JS = '''
     (function () {
       const tl = window.__timelines.main, root = document.getElementById("root");
       const clips = [...root.querySelectorAll(":scope > [data-start]")].filter(c => c.tagName !== "AUDIO");
-      const auds = [...root.querySelectorAll("audio[data-start]")];   // 배경음악 + 내레이션
-      auds.forEach(a => a.volume = Math.min(1, +a.dataset.volume || 1));
+      const auds = [...root.querySelectorAll("audio[data-start], video[data-start]")];   // 배경음악·내레이션·동영상 클립
+      auds.forEach(a => { if (a.tagName === "VIDEO") { a.muted = true; a.playbackRate = +a.dataset.playbackRate || 1; } else a.volume = Math.min(1, +a.dataset.volume || 1); });
       const total = +root.dataset.duration;
       let at = 0, playing = false, t0 = 0;
       function syncAudio(force) {   // 각 오디오를 자기 구간에서만, 맞는 위치로 재생
         auds.forEach(a => {
-          const s = +a.dataset.start, d = +a.dataset.duration, inside = playing && at >= s && at < s + d;
-          const want = (+a.dataset.mediaStart || 0) + at - s;
+          const s = +a.dataset.start, d = +a.dataset.duration, r = +a.dataset.playbackRate || 1;
+          const inside = at >= s && at < s + d, want = (+a.dataset.mediaStart || 0) + (at - s) * r;
+          if (a.tagName === "VIDEO") { a.style.visibility = inside ? "visible" : "hidden"; if (!playing && inside && Math.abs(a.currentTime - want) > 0.05) a.currentTime = want; }
+          if (!playing) { if (!a.paused) a.pause(); return; }
           if (!inside) { if (!a.paused) a.pause(); return; }
           if (force || a.paused || Math.abs(a.currentTime - want) > 0.3) a.currentTime = want;
           if (a.paused) a.play().catch(() => {});
@@ -568,7 +701,8 @@ PREVIEW_JS = '''
 def preview():
     b = request.json
     try:
-        cut = build_from_request(b, name='preview.html', extra=PREVIEW_JS)
+        view = 'portrait' if b.get('ratio') == 'portrait' or (b.get('ratio') == 'both' and b.get('view') == 'portrait') else 'landscape'
+        cut = build_from_request(b, name='preview.html', extra=PREVIEW_JS, ratio=view)
     except (KeyError, IndexError, ValueError) as e:
         return jsonify(error='구성 정보가 올바르지 않습니다: %s' % e), 400
     except RuntimeError as e:
@@ -620,14 +754,24 @@ def projects():
 
 @app.get('/api/project/<job>')
 def project(job):
-    m = meta_of(job); song_beats(job, m)
-    return jsonify(meta=m, plan=load_json(job, 'plan.json'), settings=load_json(job, 'project.json', {}),
+    m = ensure_media(job); song_beats(job, m)
+    return jsonify(meta=m, plan=load_json(job, 'plan.json'), outputs=done_outputs(job), settings=load_json(job, 'project.json', {}),
                    video=os.path.exists(os.path.join(jobdir(job), 'output.mp4')))
+
+
+def done_outputs(job):
+    """완성된 영상 목록 [{ratio, file, thumb}] (예전 프로젝트는 output.mp4 하나)."""
+    d, full = jobdir(job), get_status(job)
+    return [{'ratio': o['ratio'], 'file': o['out'], 'thumb': o['thumb'] if os.path.exists(os.path.join(d, o['thumb'])) else None}
+            for o in full.get('outputs') or outputs_for('landscape') if os.path.exists(os.path.join(d, o['out']))]
 
 
 @app.get('/api/status/<job>')
 def status(job):
-    s = {k: v for k, v in get_status(job).items() if k in ('state', 'pct', 'log')}
+    full = get_status(job)
+    s = {k: v for k, v in full.items() if k in ('state', 'pct', 'log')}
+    if full.get('state') == 'done':
+        s['outputs'] = done_outputs(job)
     if WORKER_TOKEN:  # 화면에서 'PC 렌더 프로그램이 꺼져 있음'을 안내할 수 있게
         s.update(mode='worker', worker_online=worker_online(), worker_name=_worker['name'])
     return jsonify(s)

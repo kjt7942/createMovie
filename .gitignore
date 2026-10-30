@@ -4,3 +4,4 @@ __pycache__/
 worker/config.json
 worker/server.txt
 fonts/
+models/

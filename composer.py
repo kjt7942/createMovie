@@ -6,6 +6,7 @@
 import hashlib, html, json, os, re
 
 import beats
+import media
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONTS_DIR = os.path.join(HERE, 'fonts')
@@ -101,7 +102,7 @@ TIMELINE_JS = '''<script>
       F("#b2", { scale: 0 }, { scale: 1, duration: 1.0, ease: "back.out(1.6)" }, 0.2);
       F("#b3", { scale: 0 }, { scale: 1, duration: 0.8, ease: "back.out(2)" }, 0.35);
       tl.to("#b1", { x: 40, y: 30, duration: 4, ease: "sine.inOut" }, 1);
-      body("#yr", 0.3 * K); head("#big", 0.5 * K); body("#hanja", 1.2 * K); body("#org", 1.6 * K);
+      body("#intro .ilogo", 0.1 * K); body("#yr", 0.3 * K); head("#big", 0.5 * K); body("#hanja", 1.2 * K); body("#org", 1.6 * K);
       tl.to("#intro .photo", { scale: 1.08, duration: starts[0] + 0.8, ease: "none" }, 0);
 
       starts.forEach((s, i) => {
@@ -111,7 +112,7 @@ TIMELINE_JS = '''<script>
         F(id + " .vline", { scaleY: 0 }, { scaleY: 1, duration: 0.6, ease: "power3.out" }, at(0.2));
         if (T === "collage") {
           tiles(id + " .tile", at(0.15));
-          F(id + " .tile img", { scale: 1.16 }, { scale: 1.0, duration: d, ease: "none" }, s);
+          F(id + " .tile .m", { scale: 1.16 }, { scale: 1.0, duration: d, ease: "none" }, s);
           F(id + " .cbar", { scaleX: 0 }, { scaleX: 1, duration: d, ease: "none" }, s);
           head(id + " .ttl", at(0.55)); body(id + " .sub", at(0.85));
           return;
@@ -142,7 +143,7 @@ TIMELINE_JS = '''<script>
       trans(TR[starts.length], "#outro", os, starts.length);
       F("#ob1", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.5);
       F("#ob2", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.6);
-      head("#o1", os + 0.7 * K); head("#o2", os + 1.0 * K); body("#o3", os + 1.6 * K);
+      head("#o1", os + 0.7 * K); head("#o2", os + 1.0 * K); body("#o3", os + 1.6 * K); body("#outro .ologo", os + 2.0 * K);
       tl.to("#outro .photo", { scale: 1.08, duration: total - os, ease: "none" }, os);
       tl.to("#root", { opacity: 0, duration: 0.5, ease: "power1.in" }, total - 0.5);
       F("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
@@ -189,7 +190,7 @@ PORTRAIT_CSS = '''<style>
 # ---------------------------------------------------------------- 장면 유형 CSS(변형 0)
 SCENE_CSS = '''<style>
       .scene .tile { position: relative; overflow: hidden; border-radius: 22px; background: #2a2836; }
-      .scene .tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .scene .tile .m { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
       .grid { position: absolute; left: 40px; right: 40px; top: 40px; bottom: 250px; display: grid; gap: 22px; }
       .grid.g2 { grid-template-columns: 1fr 1fr; }
       .grid.g3 { grid-template-columns: 1.35fr 1fr; grid-template-rows: 1fr 1fr; }
@@ -395,6 +396,34 @@ STYLE_PCSS = {
 }
 
 
+# ---------------------------------------------------------------- 자막·로고
+CAPTION_CSS = '''<style>
+      .cap { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; z-index: 58; pointer-events: none; }
+      .cap span { display: inline-block; max-width: 80%; padding: 10px 24px; border-radius: 10px; background: rgba(0,0,0,.62); color: #fff;
+                  font-family: var(--font-body); font-weight: 600; font-size: 38px; line-height: 1.35; word-break: keep-all; }
+      .has-cap .t-collage .ttl, .has-cap .t-collage .sub, .has-cap .t-list.v1 .items, .has-cap .grid { margin-bottom: 96px; }
+      .st-cinematic .cap { bottom: 16px; }
+      .st-cinematic .cap span { background: none; font-size: 34px; font-weight: 400; padding: 6px 12px; }
+      .st-pop .cap span { border-radius: 22px; background: rgba(42,22,56,.8); }
+      .st-kinetic .cap span { border-radius: 0; background: #0b0b0f; border-left: 8px solid var(--sun); }
+    </style>'''
+CAPTION_PCSS = '''<style>
+      .cap { bottom: 70px; }
+      .cap span { max-width: 90%; font-size: 40px; }
+    </style>'''
+LOGO_CSS = '''<style>
+      .ilogo, .ologo { position: absolute; left: 0; right: 0; margin: 0 auto; max-width: 560px; object-fit: contain; z-index: 3; }
+      .ilogo { top: 105px; height: 120px; }
+      .ologo { top: 880px; height: 100px; }
+      .tag.tlogo { padding: 10px 18px; background: rgba(255,255,255,.88); border-color: rgba(255,255,255,.9); }
+      .tag.tlogo img { display: block; height: 44px; max-width: 260px; object-fit: contain; }
+    </style>'''
+LOGO_PCSS = '''<style>
+      .ilogo { top: 420px; }
+      .ologo { top: 1240px; }
+    </style>'''
+
+
 # ---------------------------------------------------------------- HTML 조각
 def split_text(s, first_cls=''):
     """글자 단위 애니메이션용: 단어(.w, 줄바꿈 단위) 안에 글자(.ch)."""
@@ -423,21 +452,21 @@ def variant_of(s, i, seed):
     return s['v'] if s.get('v') in (0, 1) else (i + seed) % 2
 
 
-def scene_html(i, s, org, start, dur, colors, seed):
+def scene_html(i, s, tag, start, dur, colors, seed, M):
     e = html.escape
     t = s.get('type') if s.get('type') in SCENE_TYPES else 'title'
     v = variant_of(s, i, seed)
     head = (f'<div id="s{i+1}" class="scene clip t-{t} v{v}" data-start="{start}" data-duration="{dur}" '
             f'data-track-index="1" style="--c:{colors[i % 3]}">')
-    img = f'<img class="photo" src="assets/{s["photo"]}.jpg" alt="" />'
-    tag = f'<div class="tag">{org}</div>'
+    img = M.tag(s['photo'], 'photo', start, dur, M.box(t, v))
     ttl = f'<div class="ttl">{split_text(s["ttl"])}</div>'
     sub = f'<div class="sub">{e(s.get("sub", ""))}</div>' if s.get('sub') else ''
     if t == 'collage':
         ps = (s.get('photos') or [s['photo']])[:4]
-        tiles = ''.join(f'<div class="tile"><img src="assets/{p}.jpg" alt="" /></div>' for p in ps)
-        bg = f'<img class="photo bgp" src="assets/{ps[0]}.jpg" alt="" />' if v else ''
-        body = f'{bg}<div class="grid g{max(2, len(ps))}{" poly" if v else ""}">{tiles}</div>{ttl}{sub}<div class="cbar"></div>'
+        n = max(2, len(ps))
+        tiles = ''.join(f'<div class="tile">{M.tag(p, "m", start, dur, M.tile_box(n, k, v))}</div>' for k, p in enumerate(ps))
+        bg = M.tag(ps[0], 'photo bgp', None, None, None) if v else ''
+        body = f'{bg}<div class="grid g{n}{" poly" if v else ""}">{tiles}</div>{ttl}{sub}<div class="cbar"></div>'
     elif t == 'stat':
         body = (f'{img}<div class="dim"></div><div class="stat-l">{e(s["ttl"])}</div>'
                 f'<div class="stat-n">{digits_html(s["num"])}<span class="unit">{e(s.get("unit", ""))}</span></div>'
@@ -453,6 +482,61 @@ def scene_html(i, s, org, start, dur, colors, seed):
         vl = '<div class="vline"></div>' if v else ''
         body = f'{img}<div class="shade"></div>{vl}<div class="num">{i+1:02d}</div><div class="bar"></div>{ttl}{sub}{tag}'
     return f'\n      {head}\n        {body}\n      </div>'
+
+
+class Media:
+    """사진/동영상 태그를 만든다: 얼굴 모자이크 사본, 초점 기준 자르기(object-position), 동영상 클립."""
+    def __init__(self, job_dir, photos, blur, portrait):
+        self.dir, self.ph, self.blur, self.portrait, self.n = job_dir, photos or {}, blur, portrait, 0
+        self.W, self.H = (1080, 1920) if portrait else (1920, 1080)
+
+    def box(self, t, v):   # 사진이 들어갈 상자의 가로세로 비율(대략)
+        full = self.W / self.H
+        if v and t == 'title':
+            return 0.98 if self.portrait else 1.12
+        if v and t == 'stat':
+            return 1.21 if self.portrait else 0.92
+        return full
+
+    def tile_box(self, n, k, poly):
+        if poly:
+            return {2: 1.36, 3: 1.41, 4: 1.33}[n] if self.portrait else {2: 1.41, 3: 1.32, 4: 1.32}[n]
+        if self.portrait:
+            return {2: 0.37, 3: 1.37 if k == 0 else 0.87, 4: 0.76}[n]
+        return {2: 1.15, 3: 1.32 if k == 0 else 2.0, 4: 2.37}[n]
+
+    def _img(self, pid):
+        info = self.ph.get(pid, {})
+        if self.blur and info.get('faces') and info.get('kind') != 'video':
+            dst = os.path.join(self.dir, 'assets', pid + '_b.jpg')
+            if not os.path.exists(dst):
+                media.blurred(os.path.join(self.dir, 'assets', pid + '.jpg'), dst, info['faces'])
+            return f'assets/{pid}_b.jpg'
+        return f'assets/{pid}.jpg'
+
+    def _pos(self, pid, box):
+        info = self.ph.get(pid, {})
+        fx, fy = info.get('focus') or (0.5, 0.45)
+        if not box or not info.get('ar'):
+            return ''
+        x, y = media.object_pos(fx, fy, info['ar'], box)
+        return f' style="object-position:{x}% {y}%"'
+
+    def tag(self, pid, cls, start, dur, box):
+        info, pos = self.ph.get(pid, {}), self._pos(pid, box)
+        if info.get('kind') != 'video' or start is None:
+            return f'<img class="{cls}" src="{self._img(pid)}" alt=""{pos} />'
+        # 동영상: 자체 시작 시각을 가진 클립. 장면보다 짧으면 최대 0.5배속까지 늘리고, 그래도 짧으면 끝 장면에서 멈춘다.
+        self.n += 1
+        vdur = float(info.get('dur') or 0)
+        off = round(min(0.5, max(0.0, vdur - dur)), 2)
+        avail = max(0.1, vdur - off)
+        rate = 1.0 if avail >= dur else round(max(0.5, avail / dur), 3)
+        play = round(min(dur, avail / rate), 2)
+        return (f'<img class="{cls}" src="assets/{pid}_end.jpg" alt=""{pos} />'
+                f'<video id="vd{self.n}" class="{cls} clip" src="assets/{info["src"]}" poster="assets/{pid}.jpg" muted playsinline '
+                f'data-start="{start}" data-duration="{play}" data-media-start="{off}" data-playback-rate="{rate}" '
+                f'data-track-index="{100 + self.n}"{pos}></video>')
 
 
 def scene_speech(s):
@@ -479,11 +563,11 @@ def _strings(x):
             yield from _strings(v)
 
 
-def font_css(job_dir, style, plan):
+def font_css(job_dir, style, plan, captions=None):
     """스타일이 쓰는 글꼴을 이 영상의 글자만 남겨 assets/fonts/에 저장하고 @font-face를 돌려준다.
     fonts/ 원본이 없으면 시스템 글꼴로 대체(빈 문자열)."""
     st = STYLES[style]
-    text = ''.join(_strings(plan)) + '0123456789%.,·—“”:-()/ '
+    text = ''.join(_strings(plan)) + ''.join(t for *_, t in captions or []) + '0123456789%.,·—“”:-()/ '
     css, made = [], {}
     for role in ('head', 'body'):
         fam, fallback = st[role]
@@ -509,9 +593,12 @@ def font_css(job_dir, style, plan):
 
 
 # ---------------------------------------------------------------- 조립
-def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timing=None):
+def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timing=None, photos=None, blur=False,
+            logo=None, captions=None):
     """plan(p)으로 HyperFrames 컴포지션 HTML 문자열을 만든다.
-    timing=(장면 시작 목록, 엔딩 시작): 없으면 균등 배분. 박자 맞춤은 beats.snap_times()가 만든다."""
+    timing=(장면 시작 목록, 엔딩 시작): 없으면 균등 배분. 박자 맞춤은 beats.snap_times()가 만든다.
+    photos: 사진 id -> meta 정보(얼굴·초점·동영상). blur: 얼굴 모자이크. logo: None | 'corner'(장면 구석+처음·끝) | 'ends'(처음·끝만).
+    captions: [(시작, 길이, 문장)] 내레이션 자막."""
     e = html.escape
     style = p.get('style') if p.get('style') in STYLES else 'classic'
     st = STYLES[style]
@@ -521,7 +608,9 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     W, H = (1080, 1920) if portrait else (1920, 1080)
     css = '\n    '.join([re.search(r'<style>.*?</style>', base, re.S).group(0), COMMON_CSS, SCENE_CSS, VARIANT_CSS, STYLE_CSS[style]]
                        + ([PORTRAIT_CSS, PORTRAIT_SCENE_CSS, PORTRAIT_VARIANT_CSS, STYLE_PCSS.get(style, '')] if portrait else [])
-                       + [font_css(job_dir, style, p)])
+                       + [font_css(job_dir, style, p, captions)]
+                       + [CAPTION_CSS, CAPTION_PCSS if portrait else ''] * bool(captions) + [LOGO_CSS, LOGO_PCSS if portrait else ''] * bool(logo))
+    M = Media(job_dir, photos, blur, portrait)
     tl_ = max(1, len(p['title']))
     big_fs = min(190, int(940 / tl_)) if portrait else (230 if tl_ <= 8 else 170)
     n = len(p['scenes'])
@@ -530,11 +619,20 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     durs = [round(b - a + 0.6, 2) for a, b in zip(starts, nexts)]   # 다음 장면 전환과 0.6초 겹침
     total = float(length)
     org = e(p['org'])
-    scenes = ''.join(scene_html(i, s, org, starts[i], durs[i], st['colors'], seed) for i, s in enumerate(p['scenes']))
+    full = W / H
+    if logo == 'corner':   # 장면 오른쪽 위: 기관명 글자 대신 로고
+        tag = '<div class="tag tlogo"><img src="assets/logo.png" alt="" /></div>'
+    else:
+        tag = f'<div class="tag">{org}</div>'
+    ilogo = '<img class="ilogo" src="assets/logo.png" alt="" />' if logo else ''
+    ologo = '<img class="ologo" src="assets/logo.png" alt="" />' if logo else ''
+    scenes = ''.join(scene_html(i, s, tag, starts[i], durs[i], st['colors'], seed, M) for i, s in enumerate(p['scenes']))
+    caps = ''.join(f'\n      <div class="cap clip" id="cap{i}" data-start="{a}" data-duration="{d}" data-track-index="{40 + i}"><span>{e(t)}</span></div>'
+                   for i, (a, d, t) in enumerate(captions or []) if t.strip())
     o = p['outro']
     body = f'''
       <div id="intro" class="scene clip" data-start="0" data-duration="{round(starts[0] + 0.8, 2)}" data-track-index="0">
-        <img class="photo" src="assets/{p['intro_photo']}.jpg" alt="" />
+        {M.tag(p['intro_photo'], 'photo', 0, round(starts[0] + 0.8, 2), full)}{ilogo}
         <div class="blob" id="b1" style="width:620px;height:620px;left:-160px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="b2" style="width:380px;height:380px;right:-90px;bottom:-110px;background:var(--sun);opacity:.95"></div>
         <div class="blob" id="b3" style="width:160px;height:160px;right:300px;top:90px;background:var(--mint);opacity:.9"></div>
@@ -544,7 +642,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
         <div class="org" id="org"><b>{org}</b></div>
       </div>{scenes}
       <div id="outro" class="scene clip" data-start="{os_}" data-duration="{round(total - os_, 2)}" data-track-index="2">
-        <img class="photo" src="assets/{p['outro_photo']}.jpg" alt="" />
+        {M.tag(p['outro_photo'], 'photo', os_, round(total - os_, 2), full)}{ologo}
         <div class="blob" id="ob1" style="width:520px;height:520px;right:-120px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="ob2" style="width:300px;height:300px;left:-80px;bottom:-90px;background:var(--mint);opacity:.9"></div>
         <div class="o1" id="o1">{split_text(o[0])}</div><div class="o2" id="o2">{split_text(o[1])}</div><div class="o3" id="o3">{e(o[2])}</div>
@@ -553,7 +651,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
       <div class="panel" id="p_b" style="background:var(--sun)"></div>
       <div class="panel" id="p_c" style="background:var(--mint)"></div>
       <div id="flash"></div><div class="lb top"></div><div class="lb bot"></div>
-      <div id="progress"></div>{audio_html}'''
+      <div id="progress"></div>{caps}{audio_html}'''
     glob = p.get('transition') or 'mix'
     mix = st['mix']
     pick = lambda i, v: v if v in TRANSITIONS else glob if glob in TRANSITIONS else mix[(i + seed) % len(mix)]
@@ -569,7 +667,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     {css}
   </head>
   <body>
-    <div id="root" class="st-{style}" data-composition-id="main" data-start="0" data-duration="{total}" data-width="{W}" data-height="{H}">{body}
+    <div id="root" class="st-{style}{' has-cap' if caps else ''}" data-composition-id="main" data-start="0" data-duration="{total}" data-width="{W}" data-height="{H}">{body}
     </div>
     {js}{extra}
   </body>

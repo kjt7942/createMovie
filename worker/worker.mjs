@@ -78,53 +78,59 @@ function killTree(pr) {
   else pr.kill('SIGTERM');
 }
 
-async function renderJob(cfg, { job, rev, files }) {
+async function renderJob(cfg, { job, rev, files, outputs }) {
+  const outs = outputs && outputs.length ? outputs : [{ html: 'index.html', out: 'output.mp4' }];   // 가로+세로면 2개
   const dir = join(WORK, job);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(join(dir, 'assets'), { recursive: true });
   log(`작업 ${job}: 파일 ${files.length}개 받는 중`);
   for (const f of files) {
-    const r = await fetch(`${cfg.server}/jobs/${job}/${f.split('/').map(encodeURIComponent).join('/')}`, { signal: AbortSignal.timeout(120000) });
+    const r = await fetch(`${cfg.server}/jobs/${job}/${f.split('/').map(encodeURIComponent).join('/')}`, { signal: AbortSignal.timeout(10 * 60000) });
     if (!r.ok) throw new Error(`파일 받기 실패: ${f} (${r.status})`);
     mkdirSync(dirname(join(dir, f)), { recursive: true });   // assets/fonts/ 같은 하위 폴더
     writeFileSync(join(dir, f), Buffer.from(await r.arrayBuffer()));
   }
 
-  log(`작업 ${job}: 렌더링 시작`);
-  const pr = spawn('npx', ['-y', 'hyperframes', 'render', '-o', 'output.mp4'], { cwd: dir, shell: WIN });
-  let pct = 0, tail = [], cancelled = false, buf = '';
-  const onData = d => {
-    buf += d.toString('utf8');
-    const lines = buf.split(/\r?\n|\r/); buf = lines.pop();
-    for (const line of lines) {
-      const m = line.match(/"pct":(\d+)/);
-      if (m) pct = +m[1];
-      if (line.trim()) tail = [...tail, line.trimEnd()].slice(-8);
-    }
-  };
-  pr.stdout.on('data', onData); pr.stderr.on('data', onData);
-  const done = new Promise(res => pr.on('close', code => res(code)));
-  let last = -1;
+  let pct = 0, tail = [], cancelled = false, pr = null, last = -1;
   const timer = setInterval(async () => {   // 진행률 보고(겸 생존 신호)
     if (pct !== last) { process.stdout.write(`\r  진행 ${pct}%   `); last = pct; }
     const r = await postJson(cfg, `/api/worker/progress/${job}?rev=${rev}`, { pct });
-    if (r.cancel && !cancelled) { cancelled = true; log('\n사용자가 다시 렌더를 요청해 이 작업은 취소합니다.'); killTree(pr); }
+    if (r.cancel && !cancelled) { cancelled = true; log('\n사용자가 다시 렌더를 요청해 이 작업은 취소합니다.'); pr && killTree(pr); }
   }, 3000);
-  const code = await done;
-  clearInterval(timer); process.stdout.write('\n');
-  if (cancelled) return;
+  try {
+    for (const [k, o] of outs.entries()) {
+      log(`작업 ${job}: 렌더링 시작 (${k + 1}/${outs.length}, ${o.html})`);
+      pr = spawn('npx', ['-y', 'hyperframes', 'render', '-c', o.html, '-o', o.out], { cwd: dir, shell: WIN });
+      let buf = '';
+      const onData = d => {
+        buf += d.toString('utf8');
+        const lines = buf.split(/\r?\n|\r/); buf = lines.pop();
+        for (const line of lines) {
+          const m = line.match(/"pct":(\d+)/);
+          if (m) pct = Math.min(99, Math.floor(((k + +m[1] / 100) / outs.length) * 100));
+          if (line.trim()) tail = [...tail, line.trimEnd()].slice(-8);
+        }
+      };
+      pr.stdout.on('data', onData); pr.stderr.on('data', onData);
+      const code = await new Promise(res => pr.on('close', c => res(c)));
+      if (cancelled) return;
+      if (code !== 0 || !existsSync(join(dir, o.out))) {
+        log(`\n작업 ${job}: 렌더링 실패 (종료 코드 ${code})`);
+        await postJson(cfg, `/api/worker/fail/${job}?rev=${rev}`, { log: tail.join('\n') || `종료 코드 ${code}` });
+        return;
+      }
+    }
+  } finally { clearInterval(timer); process.stdout.write('\n'); }
 
-  const out = join(dir, 'output.mp4');
-  if (code !== 0 || !existsSync(out)) {
-    log(`작업 ${job}: 렌더링 실패 (종료 코드 ${code})`);
-    await postJson(cfg, `/api/worker/fail/${job}?rev=${rev}`, { log: tail.join('\n') || `종료 코드 ${code}` });
-    return;
+  for (const o of outs) {
+    log(`작업 ${job}: 완성 영상 올리는 중 (${o.out})`);
+    const r = await api(cfg, `/api/worker/upload/${job}?rev=${rev}&out=${encodeURIComponent(o.out)}`, {
+      method: 'POST', headers: { 'Content-Type': 'video/mp4' }, body: await openAsBlob(join(dir, o.out)), timeout: 30 * 60000,
+    });
+    if (!r.ok) { log(`작업 ${job}: 업로드 실패 (${r.status})`); return; }
   }
-  log(`작업 ${job}: 완성 영상 올리는 중`);
-  const r = await api(cfg, `/api/worker/done/${job}?rev=${rev}`, {
-    method: 'POST', headers: { 'Content-Type': 'video/mp4' }, body: await openAsBlob(out), timeout: 30 * 60000,
-  });
-  log(r.ok ? `작업 ${job}: 완료!` : `작업 ${job}: 업로드 실패 (${r.status})`);
+  const d = await postJson(cfg, `/api/worker/done/${job}?rev=${rev}`, {});
+  log(d.ok ? `작업 ${job}: 완료!` : `작업 ${job}: 마무리 실패`);
   rmSync(dir, { recursive: true, force: true });
 }
 

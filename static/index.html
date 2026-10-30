@@ -230,6 +230,20 @@
   .tv-p { background:var(--tally); transform:translateX(-100%); }
   .tv-l { position:absolute; left:8px; bottom:8px; padding:2px 7px; border-radius:5px; background:rgba(10,12,16,.72); color:#fff; font-size:11px; }
   .tv-l:empty { display:none; }
+  .outs { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:18px; align-items:start; margin-bottom:14px; }
+  .out video { width:100%; display:block; border-radius:10px; background:#000; }
+  .out.portrait video { aspect-ratio:9/16; max-height:72vh; object-fit:contain; }
+  .outs:has(.out.portrait):has(.out.landscape) { grid-template-columns:2fr 1fr; }
+  .out-f { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .out-f b { margin-right:auto; font-size:14px; }
+  .vthumb { position:relative; display:inline-block; flex:none; }
+  .vthumb b, .vb { position:absolute; left:4px; bottom:4px; padding:1px 5px; border-radius:4px; background:rgba(0,0,0,.7); color:#fff; font:600 10px var(--mono); }
+  .thumb .vb { left:8px; bottom:8px; font-size:11px; }
+  .pick button { position:relative; }
+  .logo-row { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+  .logo-box img { height:34px; max-width:140px; object-fit:contain; display:block; background:repeating-conic-gradient(#eee 0 25%, #fff 0 50%) 0 0/12px 12px; border-radius:4px; }
+  .seg.sm button { font-size:12px; padding:6px 10px; }
+  #logoMode { margin-top:8px; }
   .trow { display:flex; gap:6px; align-items:center; margin-bottom:4px; }
   .trow .typesel { flex:1; max-width:none; }
   .vbtn { white-space:nowrap; }
@@ -322,11 +336,11 @@
         <div>
           <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></div>
           <h3 id="dropTitle">폴더나 파일을 여기로 끌어 놓으세요</h3>
-          <p>사진 JPG · PNG · WEBP, 배경음악 MP3 · 하위 폴더까지 한 번에 읽습니다</p>
+          <p>사진 JPG · PNG · WEBP, 동영상 MP4 · MOV, 배경음악 MP3 · 하위 폴더까지 한 번에 읽습니다</p>
           <div class="row"><button class="btn sm" id="pickDir">폴더 선택</button><button class="btn sm" id="pickFiles">파일 선택</button></div>
         </div>
       </div>
-      <input type="file" id="fFiles" multiple accept="image/jpeg,image/png,image/webp,.mp3,audio/mpeg" hidden>
+      <input type="file" id="fFiles" multiple accept="image/jpeg,image/png,image/webp,.mp3,audio/mpeg,video/mp4,video/quicktime,.mov,.m4v,.webm" hidden>
       <input type="file" id="fDir" webkitdirectory multiple hidden>
       <div class="upl" id="upl" hidden><div class="track"><i id="uplBar"></i></div><span class="mono" id="uplTxt"></span></div>
       <div class="alert" id="e1" role="alert"></div>
@@ -365,7 +379,12 @@
         </div>
       </div>
       <div class="grid2">
-        <label class="field"><span>기관·단체명</span><input class="input" id="org" placeholder="예) 문경시가족센터"><small>모든 장면 오른쪽 위에 표시됩니다</small></label>
+        <div class="field"><span>기관·단체명</span><input class="input" id="org" placeholder="예) 문경시가족센터"><small>모든 장면 오른쪽 위에 표시됩니다</small>
+          <div class="logo-row"><span class="logo-box" id="logoBox"></span>
+            <button class="btn sm" id="logoPick">로고 이미지 올리기</button><button class="btn sm ghost" id="logoDel" hidden>지우기</button>
+            <input type="file" id="fLogo" accept="image/png,image/jpeg,image/webp" hidden></div>
+          <div class="seg sm" id="logoMode" hidden><button data-lm="corner" aria-pressed="true">처음·끝 + 장면 구석</button><button data-lm="ends">처음·끝만</button><button data-lm="off">안 넣기</button></div>
+          <small id="logoHint">흰 배경은 자동으로 지워져요</small></div>
         <div class="field"><span>문구 분위기</span>
           <div class="seg" id="mood">
             <button aria-pressed="true">밝고 경쾌하게</button><button>차분하고 따뜻하게</button><button>감동적으로</button><button>공식적이고 단정하게</button>
@@ -374,7 +393,10 @@
       <div class="field"><span>연출 스타일 <small style="font-weight:400;color:var(--mute)">· 글꼴, 색, 글자 등장 방식, 전환 속도가 한 벌로 바뀌어요</small></span>
         <div class="seg" id="style"><button data-st="" aria-pressed="true">AI 추천</button><button data-st="classic">클래식</button><button data-st="pop">팝 · 귀엽고 경쾌</button><button data-st="cinematic">시네마틱 · 차분하고 진지</button><button data-st="kinetic">키네틱 · 빠르고 강렬</button></div></div>
       <div class="field"><span>화면 비율</span>
-        <div class="seg" id="ratio"><button data-r="landscape" aria-pressed="true">가로 16:9 · 유튜브·TV</button><button data-r="portrait">세로 9:16 · 쇼츠·릴스·스토리</button></div></div>
+        <div class="seg" id="ratio"><button data-r="landscape" aria-pressed="true">가로 16:9 · 유튜브·TV</button><button data-r="portrait">세로 9:16 · 쇼츠·릴스·스토리</button><button data-r="both">가로 + 세로 둘 다</button></div>
+        <small style="color:var(--mute)">세로 화면에서는 사진 속 사람 얼굴을 찾아 잘리지 않게 맞춥니다</small></div>
+      <div class="field"><span>개인정보</span>
+        <label class="switch"><input type="checkbox" id="blurOn">사진 속 얼굴 흐리게(모자이크) <small style="color:var(--mute);margin-left:6px">외부 게시용 · 동영상 클립에는 적용되지 않아요</small></label></div>
       <div class="field"><span>영상 길이</span>
         <div class="len-row">
           <div class="seg" id="lenPresets"><button data-len="15">15초</button><button data-len="30" aria-pressed="true">30초</button><button data-len="60">1분</button><button data-len="120">2분</button></div>
@@ -408,6 +430,7 @@
         <div class="grid2" style="margin-top:16px">
           <div class="field"><span>목소리</span>
             <div class="seg" id="voice"><button data-v="sunhi" aria-pressed="true">선희 · 여성</button><button data-v="injoon">인준 · 남성</button><button data-v="hyunsu">현수 · 남성</button></div></div>
+          <div class="field"><span>자막</span><label class="switch"><input type="checkbox" id="subOn" checked>내레이션을 화면 자막으로도 넣기</label></div>
           <div class="field"><span>말하기 속도</span>
             <div class="seg" id="rate"><button data-rate="0" aria-pressed="true">보통</button><button data-rate="10">조금 빠르게</button><button data-rate="20">빠르게</button></div></div>
         </div>
@@ -468,9 +491,10 @@
       <div class="meta mono" id="rmeta">준비 중…</div>
     </div>
     <div class="panel" id="result" hidden>
-      <video id="video" controls playsinline></video>
+      <div class="outs" id="outs"></div>
+      <video id="video" controls playsinline hidden></video>
       <div class="done-row">
-        <a class="btn primary" id="dl" download="홍보영상.mp4">MP4 내려받기</a>
+        <a class="btn primary" id="dl" download="홍보영상.mp4" hidden>MP4 내려받기</a>
         <button class="btn" data-go="3">구성 다시 고치기</button>
         <span class="sp" style="flex:1"></span>
         <button class="btn ghost" id="newVideo">새 영상 만들기</button>
@@ -497,7 +521,7 @@
 </div>
 
 <dialog id="prevDlg">
-  <div class="dlg-h"><h2>미리보기</h2><div style="display:flex;gap:8px"><button class="btn primary sm" id="prevRender">이대로 영상 만들기</button><button class="btn ghost sm" id="prevClose">닫기</button></div></div>
+  <div class="dlg-h"><h2>미리보기</h2><div style="display:flex;gap:8px"><button class="btn sm" id="prevView" hidden>세로로 보기</button><button class="btn primary sm" id="prevRender">이대로 영상 만들기</button><button class="btn ghost sm" id="prevClose">닫기</button></div></div>
   <div class="dlg-b">
     <div class="stage" id="stage"><iframe id="prevFrame" title="영상 미리보기" tabindex="-1"></iframe><div class="stage-msg" id="stageMsg">미리보기를 준비하는 중…</div></div>
     <div class="pctl">
@@ -555,7 +579,7 @@ function summary() {
 let saveT = 0, loading = false, pendingSel = null;
 function settings() {
   return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
-          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked};
+          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked, blur: $('#blurOn').checked, logo: logoMode()};
 }
 function dirty() {   // 바뀔 때마다 1.2초 뒤 자동 저장
   if (!job || loading) return;
@@ -594,21 +618,24 @@ async function openProject(j) {
   press('#voice', $$('#voice button').find(b => b.dataset.v === nr.voice) || $('#voice button'));
   press('#rate', $$('#rate button').find(b => +b.dataset.rate === nr.rate) || $('#rate button'));
   $('#length').value = st.length || 30; $('#lenAuto').checked = !!st.lenAuto; $('#beatSync').checked = st.beatSync !== false;
+  $('#blurOn').checked = !!st.blur; $('#subOn').checked = nr.sub !== false;
+  press('#logoMode', $$('#logoMode button').find(b => b.dataset.lm === st.logo) || $('#logoMode button')); logoUI();
   pendingSel = st.aEnd ? {s: st.aStart || 0, e: st.aEnd} : null; audioKey = '';
   $('#video').removeAttribute('src'); $('#e1').textContent = $('#e2').textContent = $('#e3').textContent = $('#e4').textContent = $('#note').textContent = '';
   reached = plan ? 3 : 2;
-  if (r.video) {
-    const u = `/jobs/${job}/output.mp4?t=${Date.now()}`; $('#video').src = u; $('#dl').href = u; reached = 4;
+  if (r.outputs && r.outputs.length) {
+    showOutputs(r.outputs); reached = 4;
     $('#rendering').hidden = true; $('#result').hidden = false; $('#h4').textContent = '저장된 영상'; $('#p4').hidden = true;
   }
-  renderAssets();
+  renderAssets(); logoUI();
   if (meta.audio) await initMusic(); else syncLen();
   if (plan) { renderPlan(); go(3); } else go(meta.photos.length ? 2 : 1);
   loading = false; summary(); $('#saved').textContent = '불러옴';
 }
 function newProject() {
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
-  $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true;
+  $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#subOn').checked = true;
+  press('#logoMode', $('#logoMode button'));
   press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true;
   $('#saved').textContent = ''; $('#projDlg').open && $('#projDlg').close();
   renderAssets(); go(1);
@@ -641,16 +668,21 @@ $('#fDir').onchange = e => { upload([...e.target.files].map(f => ({f, path: f.we
 
 async function upload(items) {
   const all = items.length;
-  items = items.filter(x => /\.(jpe?g|png|webp|mp3)$/i.test(x.path));
-  if (!items.length) { $('#e1').textContent = '올릴 수 있는 파일이 없습니다. 사진(JPG·PNG·WEBP)이나 MP3를 넣어 주세요.'; return; }
+  items = items.filter(x => /\.(jpe?g|png|webp|mp3|mp4|mov|m4v|webm)$/i.test(x.path));
+  if (!items.length) { $('#e1').textContent = '올릴 수 있는 파일이 없습니다. 사진(JPG·PNG·WEBP), 동영상(MP4·MOV)이나 MP3를 넣어 주세요.'; return; }
   $('#e1').textContent = ''; $('#upl').hidden = false; $('#to2').disabled = true;
-  for (let i = 0; i < items.length; i += 15) {          // 15개씩 나눠 올려 큰 폴더도 안정적으로
-    $('#uplTxt').textContent = `${Math.min(i + 15, items.length)} / ${items.length}`;
+  const batches = []; let cur = [], size = 0;   // 15개 또는 150MB씩 나눠 올려 큰 폴더·동영상도 안정적으로
+  items.forEach(x => { if (cur.length && (cur.length >= 15 || size + x.f.size > 150e6)) { batches.push(cur); cur = []; size = 0; } cur.push(x); size += x.f.size; });
+  if (cur.length) batches.push(cur);
+  let done = 0;
+  for (const [bi, batch] of batches.entries()) {
+    const i = done; done += batch.length;
+    $('#uplTxt').textContent = `${done} / ${items.length}` + (batch.some(x => /\.(mp4|mov|m4v|webm)$/i.test(x.path)) ? ' · 동영상 처리 중' : '');
     const fd = new FormData(); fd.append('job', job);
-    items.slice(i, i+15).forEach(x => { fd.append('files', x.f); fd.append('paths', x.path); });
+    batch.forEach(x => { fd.append('files', x.f); fd.append('paths', x.path); });
     const r = await fetch('/api/upload', {method:'POST', body:fd}).then(r => r.json()).catch(() => null);
     if (!r || !r.job) { $('#e1').textContent = '업로드가 중간에 멈췄습니다. 한 번에 올리는 양을 줄이거나 다시 시도해 주세요.'; break; }
-    job = r.job; meta = r; $('#uplBar').style.width = Math.min(100, (i + 15) / items.length * 100) + '%';
+    job = r.job; meta = r; $('#uplBar').style.width = Math.min(100, done / items.length * 100) + '%';
     renderAssets();
   }
   const skipped = all - items.length + (meta.skipped || []).length;
@@ -666,10 +698,11 @@ function renderAssets() {
   if (has) $('#recentPanel').hidden = true;
   else loadProjects($('#recent'), 6).then(n => $('#recentPanel').hidden = !n || !!job);
   $('#dropTitle').textContent = has ? '자료를 더 추가하려면 여기로 끌어 놓으세요' : '폴더나 파일을 여기로 끌어 놓으세요';
-  $('#assetsCount').textContent = `사진 ${meta.photos.length}장 · 폴더 ${Object.keys(g).length}개`;
+  const nv = meta.photos.filter(p => p.kind === 'video').length;
+  $('#assetsCount').textContent = `사진 ${meta.photos.length - nv}장${nv ? ` · 동영상 ${nv}개` : ''} · 폴더 ${Object.keys(g).length}개`;
   $('#groups').innerHTML = Object.entries(g).map(([k, ps]) => `<div class="grp">
-      <div class="grp-name" title="${esc(k)}">${esc(k)}<small>사진 ${ps.length}장</small></div>
-      <div class="strip">${ps.slice(0, 14).map(p => `<img src="${thumb(p.id)}" alt="" loading="lazy">`).join('')}${ps.length > 14 ? `<span class="more mono">+${ps.length - 14}</span>` : ''}</div></div>`).join('')
+      <div class="grp-name" title="${esc(k)}">${esc(k)}<small>${ps.filter(p => p.kind !== 'video').length ? `사진 ${ps.filter(p => p.kind !== 'video').length}장` : ''}${ps.some(p => p.kind === 'video') ? ` 동영상 ${ps.filter(p => p.kind === 'video').length}개` : ''}</small></div>
+      <div class="strip">${ps.slice(0, 14).map(p => p.kind === 'video' ? `<span class="vthumb" title="동영상 ${p.dur.toFixed(1)}초"><img src="${thumb(p.id)}" alt="" loading="lazy"><b>▶ ${Math.round(p.dur)}s</b></span>` : `<img src="${thumb(p.id)}" alt="" loading="lazy">`).join('')}${ps.length > 14 ? `<span class="more mono">+${ps.length - 14}</span>` : ''}</div></div>`).join('')
     || '<div class="empty">사진이 아직 없습니다. 영상을 만들려면 사진이 한 장 이상 필요합니다.</div>';
   $('#musicRow').innerHTML = meta.audio ? `<div class="music-row"><span class="ico">♪</span><div><b>${esc(meta.audio)}</b><div style="font-size:12px;color:var(--mute)">배경음악 · 다른 MP3를 올리면 교체됩니다</div></div></div>` : '';
   $('#to2').disabled = !meta.photos.length; summary();
@@ -689,17 +722,38 @@ $$('#mood button').forEach(b => b.onclick = () => { press('#mood', b); dirty(); 
 const mood = () => $('#mood button[aria-pressed="true"]').textContent;
 const ratio = () => $('#ratio button[aria-pressed="true"]').dataset.r;
 const styleSel = () => $('#style button[aria-pressed="true"]').dataset.st;
+const logoMode = () => $('#logoMode button[aria-pressed="true"]').dataset.lm;
+const planOut = () => ({...plan, blur: $('#blurOn').checked, logo: logoMode()});   // 서버로 보낼 구성(옵션 포함)
+function logoUI() {
+  const has = !!meta.logo;
+  $('#logoBox').innerHTML = has ? `<img src="/jobs/${job}/assets/logo.png?t=${meta.logo.t}" alt="로고">` : '';
+  $('#logoDel').hidden = $('#logoMode').hidden = !has; $('#logoPick').textContent = has ? '로고 바꾸기' : '로고 이미지 올리기';
+}
+$('#logoPick').onclick = () => job ? $('#fLogo').click() : ($('#e2').textContent = '먼저 사진을 올려 주세요.');
+$('#fLogo').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  const fd = new FormData(); fd.append('job', job); fd.append('file', f);
+  const r = await fetch('/api/logo', {method: 'POST', body: fd}).then(r => r.json()).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+  if (r.error) { $('#e2').textContent = r.error; return; }
+  meta.logo = r.logo; logoUI(); dirty();
+};
+$('#logoDel').onclick = async () => { const fd = new FormData(); fd.append('job', job); fd.append('remove', '1');
+  await fetch('/api/logo', {method: 'POST', body: fd}); delete meta.logo; logoUI(); dirty(); };
+$$('#logoMode button').forEach(b => b.onclick = () => { press('#logoMode', b); dirty(); });
+$('#blurOn').onchange = () => dirty();
 $$('#style button').forEach(b => b.onclick = () => { press('#style', b); dirty(); });
 const isPortrait = () => ratio() === 'portrait';
+let prevView = 'landscape';   // '가로+세로 둘 다'일 때 미리보기로 볼 쪽
 function applyRatio() {
   $('#board').classList.toggle('portrait', isPortrait()); $('#video').classList.toggle('portrait', isPortrait());
-  $('#sumRatio').textContent = isPortrait() ? '9:16 세로' : '16:9 가로';
+  $('#sumRatio').textContent = ratio() === 'both' ? '가로 + 세로' : isPortrait() ? '9:16 세로' : '16:9 가로';
 }
 $$('#ratio button').forEach(b => b.onclick = () => { press('#ratio', b); applyRatio(); dirty(); });
 
 // ---------- 내레이션 ----------
 const CPS = 4.6;   // server.py와 같은 값: 보통 속도 초당 글자 수(공백 제외)
-const narrSel = () => ({on: $('#narrOn').checked, voice: $('#voice [aria-pressed="true"]').dataset.v, rate: +$('#rate [aria-pressed="true"]').dataset.rate});
+const narrSel = () => ({on: $('#narrOn').checked, voice: $('#voice [aria-pressed="true"]').dataset.v, rate: +$('#rate [aria-pressed="true"]').dataset.rate, sub: $('#subOn').checked});
+$('#subOn').onchange = () => dirty();
 function narrSlots(L, n) {   // server.py narr_slots()와 같은 계산
   const {starts, os} = snapTimes(L, n), nexts = [...starts.slice(1), os];
   return [[0.5, starts[0] - 0.1], ...starts.map((a, i) => [a + 0.4, nexts[i] - 0.1]), [os + 0.5, L - 0.3]];
@@ -859,7 +913,7 @@ async function ask(revise) {
   const busy = revise ? $('#redo') : $('#to3'), old = busy.innerHTML;   // 지금 누른 버튼에 진행 표시
   busy.innerHTML = `<span class="spin"></span>${revise ? '수정하는 중' : 'AI가 사진을 살펴보는 중'}`; $('#note').textContent = '';
   const prevPlan = revise ? structuredClone(plan) : null;
-  const r = await post('/api/plan', {job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), style: revise ? (plan.style || styleSel()) : styleSel(), ratio:ratio(), narr:narrSel(),
+  const r = await post('/api/plan', {job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), style: revise ? (plan.style || styleSel()) : styleSel(), ratio: ratio() === 'both' ? 'portrait' : ratio(), narr:narrSel(),
     ...(revise ? {revise, prev: prevPlan} : {})}).catch(() => ({error: '서버에 연결하지 못했습니다. 서버가 켜져 있는지 확인해 주세요.'}));
   btns.forEach(b => b.disabled = false); busy.innerHTML = old;
   if (r.error) { (revise ? $('#e3') : $('#e2')).textContent = r.error; return; }
@@ -939,7 +993,8 @@ function renderPlan() {
   $('#ticks').innerHTML = ticks.map(t => `<span style="left:${t / L * 100}%">${fmt(t).replace(/\.0$/, '')}</span>`).join('');
   $$('#ruler [data-jump]').forEach(b => b.onclick = () => { const el = $(`[data-card="${b.dataset.jump}"]`); el.scrollIntoView({behavior:'smooth', block:'center'}); el.querySelector('input').focus({preventScroll:true}); });
   const tc = (a, b) => `<span class="tc mono">${fmt(a)} – ${fmt(b)}</span>`;
-  const photoBtn = (id, slot) => `<button class="thumb" data-pick="${slot}" aria-label="사진 바꾸기"><img src="${thumb(id)}" alt=""><span class="swap">사진 바꾸기</span></button>`;
+  const isV = id => (meta.photos.find(p => p.id === id) || {}).kind === 'video';
+  const photoBtn = (id, slot) => `<button class="thumb" data-pick="${slot}" aria-label="사진 바꾸기"><img src="${thumb(id)}" alt="">${isV(id) ? '<b class="vb">▶ 동영상</b>' : ''}<span class="swap">사진·동영상 바꾸기</span></button>`;
   const f = (k, label, cls, ph = '') => `<div class="lbl">${label}</div><input class="ed ${cls}" data-k="${k}" value="${esc(/^outro\d$/.test(k) ? plan.outro[+k.slice(5)] : plan[k])}" placeholder="${ph}">`;
   // 내레이션 칸: 켜져 있을 때만. 글자 수 예산을 넘으면 빨갛게(자동으로 빠르게 읽고, 그래도 넘치면 잘림)
   const caps = narrSlots(L, plan.scenes.length).map(narrCap);
@@ -1075,7 +1130,7 @@ function openPicker(slot) {
   $('#pickTitle').textContent = slot === 'intro' ? '오프닝 사진 바꾸기' : slot === 'outro' ? '엔딩 사진 바꾸기' : `${+si + 1}번 장면 사진 바꾸기`;
   const g = {}; meta.photos.forEach(p => (g[p.folder || '폴더 없이 올린 사진'] ||= []).push(p));
   $('#pickBody').innerHTML = Object.entries(g).map(([k, ps]) => `<h4>${esc(k)}</h4><div class="pick">` +
-    ps.map(p => `<button data-id="${p.id}" class="${p.id === cur ? 'cur' : used.has(p.id) ? 'used' : ''}" title="${esc(p.path)}"><img src="${thumb(p.id)}" alt="${esc(p.path)}" loading="lazy"></button>`).join('') + '</div>').join('');
+    ps.map(p => `<button data-id="${p.id}" class="${p.id === cur ? 'cur' : used.has(p.id) ? 'used' : ''}" title="${esc(p.path)}"><img src="${thumb(p.id)}" alt="${esc(p.path)}" loading="lazy">${p.kind === 'video' ? `<b class="vb">▶ ${Math.round(p.dur)}s</b>` : ''}</button>`).join('') + '</div>').join('');
   $$('#pickBody [data-id]').forEach(b => b.onclick = () => {
     const [pi, pk] = String(pickSlot).split(':');
     if (pickSlot === 'intro') plan.intro_photo = b.dataset.id; else if (pickSlot === 'outro') plan.outro_photo = b.dataset.id;
@@ -1108,16 +1163,17 @@ function planOk() {
 // ---------- 미리보기 (렌더 없이 구성 HTML을 브라우저에서 재생) ----------
 const P = () => { try { return $('#prevFrame').contentWindow.__preview; } catch { return null; } };
 let prevRaf = 0, seeking = false;
+const prevPortrait = () => isPortrait() || (ratio() === 'both' && prevView === 'portrait');
 function fitStage() {   // 1920x1080(가로) 또는 1080x1920(세로) 구성을 무대 크기에 맞춰 축소
-  const f = $('#prevFrame'), W = isPortrait() ? 1080 : 1920, H = isPortrait() ? 1920 : 1080;
-  $('#stage').classList.toggle('portrait', isPortrait());
+  const pt = prevPortrait(), f = $('#prevFrame'), W = pt ? 1080 : 1920, H = pt ? 1920 : 1080;
+  $('#stage').classList.toggle('portrait', pt);
   f.style.width = W + 'px'; f.style.height = H + 'px'; f.style.transform = `scale(${$('#stage').clientWidth / W})`;
 }
 new ResizeObserver(fitStage).observe($('#stage'));
 $('#toPreview').onclick = async () => {
   if (!planOk()) return;
   const b = $('#toPreview'), old = b.innerHTML; b.disabled = true; b.innerHTML = '<span class="spin"></span>준비 중';
-  const r = await post('/api/preview', {job, plan, length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+  const r = await post('/api/preview', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), view: prevView, narr: narrSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
   b.disabled = false; b.innerHTML = old;
   if (r.error) { $('#e3').textContent = r.error; return; }
   $('#stageMsg').textContent = '미리보기를 준비하는 중…';
@@ -1125,7 +1181,9 @@ $('#toPreview').onclick = async () => {
   $('#prevRuler').innerHTML = [{t: 0, w: starts[0], n: '오프닝', io: 1}, ...plan.scenes.map((s, i) => ({t: starts[i] + 0.01, w: ends[i] - starts[i], n: `${i + 1} ${sName(s)}`})),
     {t: os + 0.01, w: L - os, n: '엔딩', io: 1}].map(x => `<button style="flex:${x.w}" class="${x.io ? 'io' : ''}" data-t="${x.t}" title="${esc(x.n)}">${esc(x.n)}</button>`).join('');
   $$('#prevRuler [data-t]').forEach(x => x.onclick = () => { const p = P(); p && p.seek(+x.dataset.t); });
-  $('#prevDlg').showModal(); fitStage();
+  $('#prevView').hidden = ratio() !== 'both'; $('#prevView').textContent = prevView === 'portrait' ? '가로로 보기' : '세로로 보기';
+  if (!$('#prevDlg').open) $('#prevDlg').showModal();
+  fitStage();
   const f = $('#prevFrame');
   f.onload = () => {
     if (!$('#prevDlg').open) return;   // 닫을 때 about:blank 로드는 무시
@@ -1148,11 +1206,12 @@ $('#prevSeek').addEventListener('change', () => seeking = false);
 $('#prevDlg').addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); $('#prevPlay').click(); } });
 $('#prevDlg').addEventListener('close', () => { const p = P(); p && p.pause(); cancelAnimationFrame(prevRaf); $('#prevFrame').src = 'about:blank'; });
 $('#prevClose').onclick = () => $('#prevDlg').close();
+$('#prevView').onclick = () => { const p = P(); p && p.pause(); prevView = prevView === 'portrait' ? 'landscape' : 'portrait'; $('#toPreview').onclick(); };
 $('#prevRender').onclick = () => { $('#prevDlg').close(); $('#to4').click(); };
 
 $('#to4').onclick = async () => {
   if (!planOk()) return;
-  const r = await post('/api/render', {job, plan, length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+  const r = await post('/api/render', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
   if (r.error) { $('#e3').textContent = r.error; return; }
   $('#result').hidden = true; $('#rendering').hidden = false; $('#rbar').style.width = '0'; $('#rpct').textContent = '0';
   $('#h4').textContent = '영상을 만들고 있어요'; $('#p4').hidden = false;
@@ -1174,15 +1233,24 @@ $('#to4').onclick = async () => {
     if (s.state === 'done') {
       clearInterval(poll); $('#rendering').hidden = true; $('#result').hidden = false;
       $('#h4').textContent = '영상이 완성됐어요'; $('#p4').hidden = true;
-      const u = `/jobs/${job}/output.mp4?t=${Date.now()}`; $('#video').src = u; $('#dl').href = u;
-      $('#dl').download = (plan.title || '홍보영상').replace(/[\\/:*?"<>|]/g, '') + '.mp4'; go(4);
+      showOutputs(s.outputs || []); go(4);
     } else if (s.state === 'error') {
       clearInterval(poll); $('#rendering').hidden = true; $('#h4').textContent = '영상을 만들지 못했습니다'; $('#p4').hidden = true;
       $('#e4').textContent = '렌더링 중 오류가 났습니다. 구성으로 돌아가 다시 시도해 주세요.\n\n' + (s.log || '');
     }
   }, 1500);
 };
-$('#newVideo').onclick = newProject;   // 지금 프로젝트는 저장된 채로 두고 새로 시작
+$('#newVideo').onclick = newProject;
+function showOutputs(outs) {   // 완성 영상(가로·세로)과 썸네일
+  const name = ((plan && plan.title) || '홍보영상').replace(/[\\/:*?"<>|]/g, ''), t = Date.now(), two = outs.length > 1;
+  $('#outs').innerHTML = outs.map(o => {
+    const u = `/jobs/${job}/${o.file}?t=${t}`, th = o.thumb ? `/jobs/${job}/${o.thumb}?t=${t}` : '';
+    const lab = o.ratio === 'portrait' ? '세로 9:16' : '가로 16:9', sfx = two ? (o.ratio === 'portrait' ? '_세로' : '_가로') : '';
+    return `<div class="out ${o.ratio}"><video src="${u}" controls playsinline preload="metadata"${th ? ` poster="${th}"` : ''}></video>
+      <div class="out-f"><b>${lab}</b><a class="btn primary sm" href="${u}" download="${esc(name + sfx)}.mp4">MP4 내려받기</a>
+      ${th ? `<a class="btn sm" href="${th}" download="${esc(name + sfx)}_썸네일.jpg">썸네일 JPG</a>` : ''}</div></div>`;
+  }).join('') || '<div class="empty">완성된 영상 파일을 찾지 못했습니다.</div>';
+}   // 지금 프로젝트는 저장된 채로 두고 새로 시작
 go(1); renderAssets();
 </script>
 </body>
