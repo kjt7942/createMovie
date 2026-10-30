@@ -29,11 +29,19 @@ def env(name):
     return k
 
 
-def api_key():
-    return env('GEMINI_API_KEY')
-
-
 WORKER_TOKEN = env('WORKER_TOKEN')  # 있으면 '워커 모드': 렌더링은 PC 워커가 한다
+
+
+def api_keys():
+    p = os.path.join(HERE, '.env')
+    ks = re.findall(r'^GEMINI_API_KEY(?:_\d+)?=(.+)$', open(p, encoding='utf-8').read(), re.M) if os.path.exists(p) else []
+    ks = [k.strip().strip('"\'') for k in ks]
+    if os.environ.get('GEMINI_API_KEY'):
+        ks.insert(0, os.environ['GEMINI_API_KEY'])
+    return list(dict.fromkeys(k for k in ks if k))
+
+
+_key_rr = itertools.count()  # 호출마다 시작 키를 한 칸씩 돌린다
 
 
 def jobdir(job):
@@ -182,11 +190,13 @@ PROMPT = """너는 홍보영상 기획자다. 사진은 폴더(주제)별로 정
 
 
 def gemini(parts):
-    key = api_key()
-    if not key:
+    keys = api_keys()
+    if not keys:
         raise RuntimeError('GEMINI_API_KEY가 설정되어 있지 않습니다.')
+    n = next(_key_rr) % len(keys)
+    keys = keys[n:] + keys[:n]  # 한도 초과 등 실패 시 다음 키로 넘어간다
     last = None
-    for m in MODELS:
+    for key, m in itertools.product(keys, MODELS):
         req = urllib.request.Request(
             f'https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent',
             json.dumps({'contents': [{'parts': parts}], 'generationConfig': {'responseMimeType': 'application/json'}}).encode(),
@@ -199,7 +209,7 @@ def gemini(parts):
                 lf.write(time.strftime('%Y-%m-%d %H:%M:%S ') + json.dumps(u) + '\n')
             return json.loads(resp['candidates'][0]['content']['parts'][0]['text']), u
         except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as e:
-            last = f'{m}: {e}'
+            last = f'{m}(키 …{key[-4:]}): {e}'
     raise RuntimeError('AI 호출 실패(사용량 한도일 수 있어요. 잠시 후 다시 시도): ' + str(last))
 
 
