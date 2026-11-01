@@ -356,6 +356,9 @@
         <small style="color:var(--mute)">세로 화면에서는 사진 속 사람 얼굴을 찾아 잘리지 않게 맞춥니다</small></div>
       <div class="field"><span>개인정보</span>
         <label class="switch"><input type="checkbox" id="blurOn">사진·동영상 속 얼굴 흐리게(모자이크) <small style="color:var(--mute);margin-left:6px">외부 게시용 · 자동 감지라 놓칠 수 있어 완성본을 확인하세요 · 동영상은 처음 한 번 시간이 걸려요</small></label></div>
+      <div class="field"><span>AI 활용 고지</span>
+        <label class="switch"><input type="checkbox" id="discOn">엔딩 화면에 고정 안내문 넣기 <small style="color:var(--mute);margin-left:6px">공모전·외부 게시용 · 엔딩 내내 화면 위쪽에 표시</small></label>
+        <input class="input" id="discText" maxlength="60" value="본 영상은 생성형 AI를 활용해 제작되었습니다." aria-label="고정 안내문" hidden></div>
       <div class="field"><span>영상 길이</span>
         <div class="len-row">
           <div class="seg" id="lenPresets"><button data-len="15">15초</button><button data-len="30" aria-pressed="true">30초</button><button data-len="60">1분</button><button data-len="120">2분</button></div>
@@ -553,7 +556,7 @@ function showConflict(on = true) {
 }
 function settings() {
   return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
-          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked, blur: $('#blurOn').checked, logo: logoMode()};
+          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked, blur: $('#blurOn').checked, logo: logoMode(), disc: discOut()};
 }
 function dirty() {   // 바뀔 때마다 1.2초 뒤 자동 저장
   if (!job || loading || conflict) return;
@@ -591,7 +594,7 @@ async function openProject(j) {
   press('#voice', $$('#voice button').find(b => b.dataset.v === nr.voice) || $('#voice button'));
   press('#rate', $$('#rate button').find(b => +b.dataset.rate === nr.rate) || $('#rate button'));
   $('#length').value = st.length || 30; $('#lenAuto').checked = !!st.lenAuto; $('#beatSync').checked = st.beatSync !== false;
-  $('#blurOn').checked = !!st.blur; $('#subOn').checked = nr.sub !== false;
+  $('#blurOn').checked = !!st.blur; $('#subOn').checked = nr.sub !== false; discIn(st.disc);
   press('#logoMode', $$('#logoMode button').find(b => b.dataset.lm === st.logo) || $('#logoMode button')); logoUI();
   pendingSel = st.aEnd ? {s: st.aStart || 0, e: st.aEnd} : null; audioKey = '';
   $('#video').removeAttribute('src'); $('#e1').textContent = $('#e2').textContent = $('#e3').textContent = $('#e4').textContent = $('#note').textContent = '';
@@ -610,7 +613,7 @@ function newProject() {
   clearInterval(poll);
   rev = null; showConflict(false);
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
-  $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#subOn').checked = true;
+  $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#subOn').checked = true; discIn('');
   press('#logoMode', $('#logoMode button'));
   press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true;
   $('#saved').textContent = ''; $('#projDlg').open && $('#projDlg').close();
@@ -701,7 +704,10 @@ const mood = () => $('#mood button[aria-pressed="true"]').textContent;
 const ratio = () => $('#ratio button[aria-pressed="true"]').dataset.r;
 const styleSel = () => $('#style button[aria-pressed="true"]').dataset.st;
 const logoMode = () => $('#logoMode button[aria-pressed="true"]').dataset.lm;
-const planOut = () => ({...plan, blur: $('#blurOn').checked, logo: logoMode()});   // 서버로 보낼 구성(옵션 포함)
+const DISC_DEFAULT = '본 영상은 생성형 AI를 활용해 제작되었습니다.';
+const discOut = () => $('#discOn').checked ? ($('#discText').value.trim() || DISC_DEFAULT) : '';
+function discIn(t) { $('#discOn').checked = !!t; $('#discText').value = t || DISC_DEFAULT; $('#discText').hidden = !t; }
+const planOut = () => ({...plan, blur: $('#blurOn').checked, logo: logoMode(), disclaimer: discOut()});   // 서버로 보낼 구성(옵션 포함)
 function logoUI() {
   const has = !!meta.logo;
   $('#logoBox').innerHTML = has ? `<img src="/jobs/${job}/assets/logo.png?t=${meta.logo.t}" alt="로고">` : '';
@@ -719,6 +725,8 @@ $('#logoDel').onclick = async () => { const fd = new FormData(); fd.append('job'
   await fetch('/api/logo', {method: 'POST', body: fd}); delete meta.logo; logoUI(); dirty(); };
 $$('#logoMode button').forEach(b => b.onclick = () => { press('#logoMode', b); dirty(); });
 $('#blurOn').onchange = () => dirty();
+$('#discOn').onchange = () => { $('#discText').hidden = !$('#discOn').checked; dirty(); };
+$('#discText').oninput = () => dirty();
 $$('#style button').forEach(b => b.onclick = () => { press('#style', b); dirty(); });
 const isPortrait = () => ratio() === 'portrait';
 let prevView = 'landscape';   // '가로+세로 둘 다'일 때 미리보기로 볼 쪽

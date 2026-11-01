@@ -1,5 +1,5 @@
 """Checks the logic that needs no GPU. Run: python studio/test_engine.py"""
-import json, tempfile, threading, time
+import json, os, tempfile, threading, time
 from pathlib import Path
 
 import engine
@@ -467,8 +467,10 @@ def check_stop_and_removal():
 def check_availability():
     saved = engine.gpu_sample, engine.shutil.which, engine.PY, engine.WAN, engine.os.name
     cached = engine.availability
+    env = {k: os.environ.pop(k, None) for k in ("H3_LICENSE_REGION", "H3_LICENSE_GRANTED")}
     try:
         engine.availability = engine._check_availability  # The 5s cache would hide every change below.
+        os.environ["H3_LICENSE_GRANTED"] = "1"  # The hardware checks below are about this PC; the notice is checked at the end.
         engine.os.name = "nt"
         engine.shutil.which = lambda c: None
         state = engine.availability()
@@ -493,10 +495,26 @@ def check_availability():
             (wan / "ckpts" / engine.MODEL_FILE).write_text("")
             state = engine.availability()
             assert state.pop("ref_installed") is False
-            assert state == {"ok": True, "gpu_ok": True, "installed": True, "reasons": []}
+            assert state == {"ok": True, "gpu_ok": True, "installed": True, "reasons": [], "license_notice": ""}
+
+            # The H3 license excludes Korea, the US, the UK and the EU: by default (Korea) a notice shows, but generation stays allowed.
+            del os.environ["H3_LICENSE_GRANTED"]
+            state = engine.availability()
+            assert state["ok"] and "라이선스" in state["license_notice"] and state["reasons"] == []
+            for region, notice in (("kr", True), ("DE", True), ("US", True), ("JP", False), ("SG", False)):
+                os.environ["H3_LICENSE_REGION"] = region
+                state = engine.availability()
+                assert state["ok"] and bool(state["license_notice"]) is notice, region
+            os.environ["H3_LICENSE_REGION"] = "KR"
+            os.environ["H3_LICENSE_GRANTED"] = "1"  # A separate license from MiniMax removes the notice.
+            assert engine.availability()["license_notice"] == ""
     finally:
         engine.gpu_sample, engine.shutil.which, engine.PY, engine.WAN, engine.os.name = saved
         engine.availability = cached
+        for k, v in env.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
 
 
 def check_gpu_limits():

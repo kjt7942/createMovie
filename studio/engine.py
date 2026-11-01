@@ -56,6 +56,37 @@ MODEL_FILE = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
 REF_MODEL_FILE = "MiniMax-H3-Ref2VA-pruned_rank8_int8_convrot.safetensors"
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
+# MiniMax H3 Community License (2026-08-02): the license is not granted in its Excluded Territories, and using or showing
+# H3 outputs there is not allowed either. Set H3_LICENSE_REGION to where this PC runs, or H3_LICENSE_GRANTED=1 with a separate
+# license from MiniMax (api@minimax.io). https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE
+H3_EXCLUDED_REGIONS = {"KR", "US", "GB", "UK", "EU"} | {
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+    "PL", "PT", "RO", "SK", "SI", "ES", "SE"}
+
+
+def _env(name):
+    """Environment variable, or the same line in the project's .env (the server reads keys the same way)."""
+    v = os.environ.get(name)
+    p = ROOT / ".env"
+    if v is None and p.is_file():
+        m = re.search(r"^%s=(.*)$" % name, p.read_text(encoding="utf-8"), re.M)
+        v = m and m.group(1).strip().strip("\"'")
+    return v or ""
+
+
+def license_notice():
+    """A warning shown above the create form when the H3 license does not cover this region, or ''.
+    It only informs: generation stays allowed, and the user decides."""
+    if _env("H3_LICENSE_GRANTED").strip() == "1":
+        return ""
+    region = _env("H3_LICENSE_REGION").strip().upper() or "KR"
+    if region not in H3_EXCLUDED_REGIONS:
+        return ""
+    return ("MiniMax H3 라이선스는 대한민국·미국·영국·EU에서 모델과 생성 영상의 사용을 허용하지 않습니다. "
+            "공모전 출품이나 외부 게시용 영상에는 쓰지 마세요. "
+            "MiniMax(api@minimax.io)에서 별도 라이선스를 받았다면 .env에 H3_LICENSE_GRANTED=1을 넣으면 이 안내가 사라집니다.")
+
+
 ID_RE = re.compile(r"^[0-9a-f]{12}$")
 
 
@@ -900,6 +931,7 @@ def _check_availability():
     if gpu_ok and not installed:
         reasons.append("AI 영상 생성 도구(Wan2GP와 모델)가 설치되어 있지 않습니다. 설치·점검 화면에서 설치하세요.")
     return {"ok": gpu_ok and installed, "gpu_ok": gpu_ok, "installed": installed, "reasons": reasons,
+            "license_notice": license_notice(),
             "ref_installed": (WAN / "ckpts" / REF_MODEL_FILE).is_file()}
 
 
