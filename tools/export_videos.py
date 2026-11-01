@@ -8,7 +8,7 @@ from pathlib import Path
 
 PROJECTS = Path(__file__).resolve().parent.parent / "jobs" / "studio"
 TARGET = Path(r"C:\Users\kjt79\Desktop\영상")
-STATUS_URL = "http://127.0.0.1:7870/api/status"
+STATUS_URL = "http://127.0.0.1:5000/h3/api/status"
 
 
 def safe_name(title):

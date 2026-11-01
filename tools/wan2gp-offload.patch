@@ -1,0 +1,13 @@
+diff --git a/mmgp/offload.py b/mmgp/offload.py
+index 1d481ef6..bc77854c 100644
+--- a/mmgp/offload.py
++++ b/mmgp/offload.py
+@@ -1332,7 +1332,7 @@ def _mapped_pages(leaves):
+     for pointer, nbytes in sorted(leaves):
+         if not region[0] <= pointer < region[1]:
+             found = _virtual_query(pointer, ctypes.byref(info), ctypes.sizeof(info)) != 0
+-            region = (info.BaseAddress, info.BaseAddress + info.RegionSize, info.AllocationBase if info.Type != 0x20000 else None) if found else (0, 0, None) # not MEM_PRIVATE: its view
++            region = (info.BaseAddress or 0, (info.BaseAddress or 0) + info.RegionSize, info.AllocationBase if info.Type != 0x20000 else None) if found else (0, 0, None) # not MEM_PRIVATE: its view
+         if region[2] is None or nbytes == 0:
+             continue
+         start, end = pointer // PAGE_SIZE * PAGE_SIZE, (pointer + nbytes + PAGE_SIZE - 1) // PAGE_SIZE * PAGE_SIZE

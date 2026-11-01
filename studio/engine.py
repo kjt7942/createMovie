@@ -44,6 +44,8 @@ MIN_DISK_GB, MIN_RAM_GB, MAX_START_VRAM_MB = 15, 16, 2500
 SECONDS_PER_MEGAPIXEL_FRAME = 6.0  # Measured: 5.4 to 7.3 across the test runs.
 LOAD_SECONDS = 60
 MAX_RETRIES = 1
+MIN_VRAM_MB = 7500  # Tested on an 8GB card, which reports slightly under 8192MB on some drivers.
+MODEL_FILE = "MiniMax-H3-FL2VA-pruned_rank8_int8_convrot.safetensors"
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 ID_RE = re.compile(r"^[0-9a-f]{12}$")
@@ -423,7 +425,33 @@ def wgp_processes():
         return []
 
 
+def availability():
+    """Whether H3 can run on this machine, with reasons in the user's words. nvidia-smi present but silent is a crash, not a missing GPU."""
+    reasons = []
+    if os.name != "nt":
+        reasons.append("AI 영상 생성은 NVIDIA GPU가 있는 Windows PC에서만 쓸 수 있습니다.")
+    elif not shutil.which("nvidia-smi"):
+        reasons.append("NVIDIA GPU를 찾지 못했습니다. AI 영상 생성에는 GPU 메모리 8GB 이상의 NVIDIA GPU가 필요합니다.")
+    else:
+        gpu = gpu_sample()
+        if gpu is None:
+            reasons.append("GPU가 응답하지 않습니다. PC를 재부팅한 뒤 다시 확인하세요.")
+        elif gpu["mem_total"] is not None and gpu["mem_total"] < MIN_VRAM_MB:
+            reasons.append(f"GPU 메모리가 {gpu['mem_total'] / 1024:.0f}GB입니다. AI 영상 생성에는 8GB 이상이 필요합니다.")
+    gpu_ok = not reasons
+    installed = PY.is_file() and (WAN / "wgp.py").is_file() and (WAN / "ckpts" / MODEL_FILE).is_file()
+    if gpu_ok and not installed:
+        reasons.append("AI 영상 생성 도구(Wan2GP와 모델)가 설치되어 있지 않습니다. 설치·점검 화면에서 설치하세요.")
+    return {"ok": gpu_ok and installed, "gpu_ok": gpu_ok, "installed": installed, "reasons": reasons}
+
+
 def kill_tree(pid):
+    if os.name != "nt":
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            pass
+        return
     try:
         run_cmd(["taskkill", "/PID", str(pid), "/T", "/F"], timeout=30)
     except (OSError, subprocess.TimeoutExpired):
@@ -547,6 +575,8 @@ class Runner:
     """Runs queued projects one at a time, oldest first. All shared state sits behind self.lock.
 
     The queue is the "queued" status plus queued_at in each project.json, so it survives a restart.
+    `external` adds other work to the same line, so nothing that competes for the machine ever overlaps. It needs
+    queued() -> [{kind, id, title, estimate, at}], run(id, runner), remove(id) and recover().
     """
 
     def __init__(self):
@@ -562,6 +592,9 @@ class Runner:
         self.live = {"phase": "idle", "scene": None, "stage": "", "fraction": 0.0, "stage_since": 0.0,
                      "started": 0.0, "eta": None, "checks": []}
         self.pending_kill = None
+        self.external = None
+        self.external_proc = None  # Kept apart from self.proc: the GPU watchdog must not kill work that needs no GPU.
+        self.current = None
         threading.Thread(target=self._monitor, daemon=True).start()
 
     # ----- Public API -----
@@ -585,7 +618,9 @@ class Runner:
                 p.update(status="queued", queued_at=p.get("queued_at", 0), pid=None,
                          message="프로그램이나 PC가 생성 도중 종료됐습니다. 대기열을 재개하면 완료된 장면은 건너뛰고 이어서 만듭니다.")
                 save_project(p)
-        if self._queued():
+        if self.external:
+            self.external.recover()
+        if self._items():
             self.paused, self.pause_reason = True, "프로그램이 다시 시작됐습니다. 준비되면 재개를 누르세요."
 
     def enqueue(self, pid):
@@ -594,11 +629,27 @@ class Runner:
             p = load_project(pid)
             if p["status"] == "queued" or (self.active and self.project_id == pid):
                 raise StudioError("이미 대기열에 있거나 생성 중입니다.")
-            if not self._queued():
+            if not self._items():
                 self.paused = False  # An empty queue has nothing left to protect, so a stopped project can simply restart.
             p.update(status="queued", queued_at=time.time(), message="")
             save_project(p)
             self._dispatch()
+
+    def enqueue_external(self, mark_queued):
+        """Same rules as enqueue, for external work. mark_queued() records it as waiting."""
+        with self.lock:
+            if not self._items():
+                self.paused = False
+            mark_queued()
+            self._dispatch()
+
+    def remove_external(self, item_id):
+        with self.lock:
+            self.external.remove(item_id)
+
+    def set_external_proc(self, proc):
+        with self.lock:
+            self.external_proc = proc
 
     def dequeue(self, pid):
         with self.lock:
@@ -635,27 +686,54 @@ class Runner:
                     continue
         return sorted(out, key=lambda p: p.get("queued_at", 0))
 
+    def _items(self):
+        """Everything waiting in the one queue, next first."""
+        items = [{"kind": "h3", "id": p["id"], "title": p["script"]["title"], "at": p.get("queued_at", 0),
+                  "estimate": sum(estimate_scene_seconds(p["size"], s["frames"]) for s in p["script"]["scenes"])}
+                 for p in self._queued()]
+        if self.external:
+            items += self.external.queued()
+        return sorted(items, key=lambda x: x["at"])
+
     def _dispatch(self):
-        """Starts the next queued project if the runner is free. The caller holds self.lock."""
+        """Starts the next waiting item if the runner is free. The caller holds self.lock."""
         if self.active or self.paused:
             return
-        queued = self._queued()
-        if not queued:
+        items = self._items()
+        if not items:
             return
-        pid = queued[0]["id"]
+        item = items[0]
+        h3 = item["kind"] == "h3"
         self.active = True
+        self.current = item
         self.stop_event.clear()
-        self.project_id = pid
+        self.project_id = item["id"] if h3 else None
         self.log.clear()
-        self.live.update(phase="preflight", scene=None, stage="시작 전 점검", fraction=0.0, eta=None,
-                         started=time.time(), stage_since=time.time(), checks=[])
-        threading.Thread(target=self._run, args=(pid,), daemon=True).start()
+        self.live.update(phase="preflight" if h3 else item["kind"], scene=None, stage="시작 전 점검" if h3 else "렌더링 준비",
+                         fraction=0.0, eta=None, started=time.time(), stage_since=time.time(), checks=[])
+        target = self._run if h3 else self._run_external
+        threading.Thread(target=target, args=(item["id"],), daemon=True).start()
+
+    def _run_external(self, item_id):
+        """external.run records its own failures, so only a stop or a failure to record one holds the queue."""
+        reason = ""
+        try:
+            self.external.run(item_id, self)
+        except Exception as e:  # Left as waiting, so dispatching again could retry forever.
+            reason = f"문제가 생겨 대기열을 멈췄습니다: {type(e).__name__}: {e}"
+        if self.stop_event.is_set():
+            reason = "멈추기를 눌러 대기열도 멈췄습니다."
+        with self.lock:
+            self.active, self.current, self.external_proc = False, None, None
+            if reason and self._items():
+                self.paused, self.pause_reason = True, reason
+            self._dispatch()
 
     def stop(self):
         """Stops the current project and holds the rest of the queue, because the next one would start right away."""
         self.stop_event.set()
         with self.lock:
-            proc = self.proc
+            proc = self.proc or self.external_proc
         if proc and proc.poll() is None:
             kill_tree(proc.pid)
 
@@ -665,10 +743,7 @@ class Runner:
 
     def snapshot(self):
         with self.lock:
-            queue = [{"id": p["id"], "title": p["script"]["title"],
-                      "estimate": sum(estimate_scene_seconds(p["size"], s["frames"]) for s in p["script"]["scenes"])}
-                     for p in self._queued()]
-            return {"project": self.project_id, "busy": self.active, "queue": queue, "paused": self.paused,
+            return {"project": self.project_id, "current": self.current, "busy": self.active, "queue": self._items(), "paused": self.paused,
                     "pause_reason": self.pause_reason,
                     "live": dict(self.live), "gpu": list(self.history)[-120:], "log": list(self.log)[-60:]}
 
@@ -732,8 +807,8 @@ class Runner:
             keep_going = project is not None
         finally:  # A project that could not be marked failed stays queued, so keep_going False also prevents a retry loop.
             with self.lock:
-                self.active = False
-                if not keep_going and self._queued():
+                self.active, self.current = False, None
+                if not keep_going and self._items():
                     self.paused, self.pause_reason = True, reason
                 self._dispatch()
 

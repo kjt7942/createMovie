@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>설치·점검</title>
+<style>
+:root { --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --muted:#667085; --line:#dfe3ea; --accent:#3257d6; --ok:#12805c; --bad:#c62f2f; --soft:#eef1f6; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171d; --card:#1d212a; --ink:#e7eaf0; --muted:#98a2b3; --line:#323844; --accent:#7f9cff; --ok:#4cc79c; --bad:#f07878; --soft:#272c37; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 "Malgun Gothic","Segoe UI",system-ui,sans-serif; }
+main { max-width:820px; margin:auto; padding:20px 16px; }
+h1 { font-size:22px; margin:6px 0 16px; } h2 { font-size:16px; margin:0 0 10px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
+.t { display:flex; gap:10px; padding:7px 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
+.t b { flex:none; width:44px; font-weight:600; } .t.ok b { color:var(--ok); } .t.no b { color:var(--bad); }
+.t small { display:block; color:var(--muted); }
+code { font:13px Consolas,monospace; background:var(--soft); padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+button { font:inherit; padding:8px 14px; border-radius:6px; border:1px solid var(--line); background:var(--soft); color:var(--ink); cursor:pointer; margin:4px 8px 4px 0; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+@media (prefers-color-scheme: dark) { button.primary { color:#10131a; } }
+.muted { color:var(--muted); font-size:14px; }
+ol { padding-left:20px; margin:6px 0; }
+</style>
+</head>
+<body>
+<script src="/nav.js"></script>
+<main>
+  <h1>설치·점검</h1>
+  <div class="card"><h2>이 PC 상태</h2><div id="items" class="muted">확인 중입니다.</div></div>
+  <div class="card" id="auto" hidden>
+    <h2>자동 설치</h2>
+    <p class="muted">빠진 도구만 설치합니다. 새 콘솔 창이 열리고, 관리자 확인 창이 뜨면 '예'를 눌러 주세요.</p>
+    <button class="primary" id="base">기본 도구 설치</button>
+    <button id="h3" hidden>AI 영상 생성 도구까지 설치 (약 60GB)</button>
+    <div id="msg" class="muted"></div>
+  </div>
+  <div class="card">
+    <h2>처음 설치하는 방법</h2>
+    <ol>
+      <li>Windows 10/11에서 이 폴더의 <code>setup.bat</code>을 더블클릭합니다.</li>
+      <li>Python, Node.js, FFmpeg, Git이 없으면 winget으로 설치하고, 패키지와 글꼴을 받습니다.</li>
+      <li>Gemini API 키를 묻습니다. Google AI Studio에서 무료로 발급받아 붙여 넣으세요. 나중에 <code>.env</code>에 넣어도 됩니다.</li>
+      <li>NVIDIA GPU가 있으면 AI 영상 생성 도구를 설치할지 묻습니다.</li>
+      <li>바탕화면의 <b>createMovie</b> 바로가기나 <code>start.bat</code>으로 실행합니다. 주소는 <code>http://localhost:5000</code>입니다.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h2>AI 영상 생성에 필요한 것</h2>
+    <ol>
+      <li>NVIDIA GPU, GPU 메모리 8GB 이상. RTX 3070 Ti 8GB에서 시험했습니다.</li>
+      <li>디스크 여유 약 60GB. 내려받는 데 네트워크 속도에 따라 몇 시간이 걸릴 수 있습니다.</li>
+      <li>GPU가 없으면 AI 영상 생성은 쓸 수 없지만 사진 홍보 영상은 그대로 쓸 수 있습니다.</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h2>직접 설치할 때</h2>
+    <ol>
+      <li><code>winget install -e --id Python.Python.3.12</code></li>
+      <li><code>winget install -e --id OpenJS.NodeJS.LTS</code></li>
+      <li><code>winget install -e --id Gyan.FFmpeg</code></li>
+      <li><code>winget install -e --id Git.Git</code></li>
+      <li><code>pip install -r requirements.txt</code></li>
+      <li><code>python tools/get_fonts.py</code></li>
+      <li><code>npx -y hyperframes browser ensure</code></li>
+      <li><code>.env</code> 파일에 <code>GEMINI_API_KEY=발급받은키</code></li>
+      <li>AI 영상 생성: <code>python tools/setup_h3.py</code></li>
+    </ol>
+    <p class="muted">NAS에서는 Docker로 실행합니다. 렌더링은 PC 워커가 맡고, AI 영상 생성은 쓸 수 없습니다. 자세한 내용은 README를 보세요.</p>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+function row(i) {
+  const d = document.createElement('div'); d.className = `t ${i.ok ? 'ok' : 'no'}`;
+  const b = document.createElement('b'); b.textContent = i.ok ? '정상' : '없음';
+  const s = document.createElement('span'); s.textContent = `${i.group} · ${i.name}`;
+  if (!i.ok) { const f = document.createElement('small'); f.textContent = i.fix; s.append(f); }
+  d.append(b, s); return d;
+}
+async function run(h3) {
+  $('msg').textContent = '설치 창을 여는 중입니다.';
+  const r = await fetch('/api/setup/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ h3 }) }).catch(() => null);
+  $('msg').textContent = r && r.ok ? '새 콘솔 창에서 설치가 진행됩니다. 끝나면 서비스를 다시 시작하고 이 화면을 새로고침하세요.' : '설치 창을 열지 못했습니다. setup.bat을 직접 실행해 주세요.';
+}
+(async () => {
+  try {
+    const s = await fetch('/api/setup/status').then(r => r.json());
+    $('items').replaceChildren(...s.items.map(row));
+    $('items').className = '';
+    if (s.local && s.windows) {
+      $('auto').hidden = false;
+      $('h3').hidden = !s.h3.gpu_ok || s.h3.installed;
+      $('base').onclick = () => run(false);
+      $('h3').onclick = () => run(true);
+    }
+  } catch { $('items').textContent = '상태를 불러오지 못했습니다. 서버가 실행 중인지 확인하세요.'; }
+})();
+</script>
+</body>
+</html>

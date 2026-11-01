@@ -1,13 +1,15 @@
 """홍보영상 제작 웹앱. 업로드(폴더 포함) -> Gemini가 장면/사진 배정 -> HyperFrames 렌더.
 실행: GEMINI_API_KEY 환경변수(또는 이 폴더의 .env)를 준비하고 `python server.py` -> http://localhost:5000
-WORKER_TOKEN을 설정하면 렌더링을 이 서버에서 하지 않고 대기열에 넣어 두고, PC의 렌더 워커(worker/)가 가져가 처리한다."""
-import base64, hmac, html, itertools, json, os, random, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid
+WORKER_TOKEN을 설정하면 렌더링을 이 서버에서 하지 않고 대기열에 넣어 두고, PC의 렌더 워커(worker/)가 가져가 처리한다.
+이 PC에서 하는 작업(홍보 영상 렌더, /h3의 AI 영상 생성)은 studio.engine.Runner의 대기열 하나로 차례대로 처리한다."""
+import base64, hmac, html, itertools, json, os, random, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid, webbrowser
 from flask import Flask, abort, jsonify, request, send_from_directory
 from PIL import Image, ImageOps
 import beats
 import composer
 import media
 from composer import SCENE_TYPES, STYLES, scene_speech
+from studio import engine, h3_routes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 JOBS = os.path.join(HERE, 'jobs')
@@ -16,7 +18,9 @@ MAX_VISION = 40  # Gemini에 보여줄 사진 수 상한(초과분은 균등 샘
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 워커가 올리는 완성 영상(최대 10분)까지 받는다
-_render_lock = threading.Lock()  # 서버에서 직접 렌더할 때 1건씩만
+app.json.sort_keys = False  # 해상도 목록을 시험한 기본값이 먼저 오는 순서 그대로 보낸다
+app.register_blueprint(h3_routes.app)
+runner = h3_routes.runner
 _state_lock = threading.Lock()
 
 
@@ -85,23 +89,8 @@ def upload():
             parts = path.split('/')
             m['photos'].append(analyze_photo(d, {'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else '', 'ar': ar}))
         elif ext in media.VIDEO_EXT:
-            vid = f'v{len(m["photos"]) + 1:03d}'
-            src = os.path.join(d, 'assets', vid + ext)
-            f.save(src)
-            info = media.probe(src)
-            if not info:
-                os.remove(src); skipped.append(path); continue
-            dur, vw, vh = info
-            try:   # 포스터(앞부분)·끝 장면: AI가 보고 고르는 사진, 동영상이 끝난 뒤 멈춰 보일 장면
-                media.frame(src, min(1.0, dur / 3), os.path.join(d, 'assets', vid + '.jpg'))
-                media.frame(src, max(0, dur - 0.15), os.path.join(d, 'assets', vid + '_end.jpg'))
-                im = Image.open(os.path.join(d, 'assets', vid + '.jpg')); im.thumbnail((384, 384))
-                im.save(os.path.join(d, 'thumbs', vid + '.jpg'), quality=75)
-            except Exception:
-                os.remove(src); skipped.append(path); continue
-            parts = path.split('/')
-            m['photos'].append(analyze_photo(d, {'id': vid, 'kind': 'video', 'src': vid + ext, 'dur': round(dur, 2), 'path': path,
-                                                 'folder': parts[-2] if len(parts) > 1 else '', 'ar': round(vw / vh, 4)}))
+            if not add_video(d, m, path, ext, f.save):
+                skipped.append(path)
         elif ext == '.mp3':
             f.save(os.path.join(d, 'assets', 'bgm.mp3')); m['audio'] = os.path.basename(path); m.pop('beats', None)
         else:
@@ -109,6 +98,54 @@ def upload():
     save_meta(job, m)
     song_beats(job, m)
     return jsonify(job=job, **m, skipped=skipped)
+
+
+def add_video(d, m, path, ext, save):
+    """동영상을 자료에 추가한다. save(대상 경로)가 파일을 놓는다. 읽을 수 없는 파일이면 False."""
+    vid = f'v{len(m["photos"]) + 1:03d}'
+    src = os.path.join(d, 'assets', vid + ext)
+    save(src)
+    info = media.probe(src)
+    if not info:
+        os.remove(src); return False
+    dur, vw, vh = info
+    try:   # 포스터(앞부분)·끝 장면: AI가 보고 고르는 사진, 동영상이 끝난 뒤 멈춰 보일 장면
+        media.frame(src, min(1.0, dur / 3), os.path.join(d, 'assets', vid + '.jpg'))
+        media.frame(src, max(0, dur - 0.15), os.path.join(d, 'assets', vid + '_end.jpg'))
+        im = Image.open(os.path.join(d, 'assets', vid + '.jpg')); im.thumbnail((384, 384))
+        im.save(os.path.join(d, 'thumbs', vid + '.jpg'), quality=75)
+    except Exception:
+        os.remove(src); return False
+    parts = path.split('/')
+    m['photos'].append(analyze_photo(d, {'id': vid, 'kind': 'video', 'src': vid + ext, 'dur': round(dur, 2), 'path': path,
+                                         'folder': parts[-2] if len(parts) > 1 else '', 'ar': round(vw / vh, 4)}))
+    return True
+
+
+@app.post('/api/from_h3/<pid>')
+def from_h3(pid):
+    """완성된 AI 영상을 클립으로 넣은 새 홍보 영상 프로젝트를 만든다. 원본은 그대로 둔다."""
+    if not h3_routes.is_local():
+        abort(403)
+    try:
+        project = engine.load_project(pid)
+    except (engine.StudioError, ValueError, OSError):
+        return jsonify(error='AI 영상 프로젝트를 찾을 수 없습니다.'), 404
+    final = engine.project_dir(pid) / 'final.mp4'
+    if not final.is_file():
+        return jsonify(error='완성된 영상이 없습니다.'), 400
+    job = uuid.uuid4().hex[:12]
+    d = jobdir(job)
+    for sub in ('assets', 'thumbs'):
+        os.makedirs(os.path.join(d, sub))
+    shutil.copy(os.path.join(HERE, 'gsap.min.js'), os.path.join(d, 'assets', 'gsap.min.js'))
+    m = {'photos': [], 'audio': None}
+    name = re.sub(r'[\\/:*?"<>|]', '', project['script']['title']) + '.mp4'
+    if not add_video(d, m, name, '.mp4', lambda dst: shutil.copy(final, dst)):
+        shutil.rmtree(d, ignore_errors=True)
+        return jsonify(error='영상을 읽지 못했습니다. FFmpeg 설치를 확인하세요.'), 500
+    save_meta(job, m)
+    return jsonify(job=job)
 
 
 def analyze_photo(d, p):
@@ -480,29 +517,86 @@ def finalize(job, rev):
     return True
 
 
-def run_render(job, rev):
-    """PC 한 대로 쓸 때: 이 서버에서 직접 렌더한다(출력이 여러 개면 차례로)."""
-    with _render_lock:
-        set_status(job, rev, state='running', pct=0)
-        outs = get_status(job).get('outputs') or []
-        tail, pct = [], 0
-        for k, o in enumerate(outs):
-            part = o['out'] + '.new.mp4'
-            pr = subprocess.Popen([shutil.which('npx') or 'npx', '-y', 'hyperframes', 'render', '-c', o['html'], '-o', part],
-                                  cwd=jobdir(job), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
-            for line in pr.stdout:
-                mm = re.search(r'"pct":(\d+)', line)
-                if mm:
-                    v = int((k + int(mm.group(1)) / 100) / len(outs) * 100)
-                    if v != pct:
-                        pct = v; set_status(job, rev, pct=min(99, pct))
-                tail = (tail + [line.rstrip()])[-8:]
-            pr.wait()
-            path = os.path.join(jobdir(job), part)
-            if pr.returncode != 0 or not os.path.exists(path):
-                set_status(job, rev, state='error', pct=pct, log='\n'.join(tail)); return
-            os.replace(path, os.path.join(jobdir(job), o['out'] + '.new'))
-        finalize(job, rev)
+def run_render(job, rev, on_proc=lambda p: None, on_pct=lambda pct: None, stopped=lambda: False):
+    """PC 한 대로 쓸 때: 이 서버에서 직접 렌더한다(출력이 여러 개면 차례로). 대기열이 한 번에 하나만 부른다."""
+    if not set_status(job, rev, state='running', pct=0):
+        return
+    outs = get_status(job).get('outputs') or []
+    tail, pct = [], 0
+    for k, o in enumerate(outs):
+        part = o['out'] + '.new.mp4'
+        pr = subprocess.Popen([shutil.which('npx') or 'npx', '-y', 'hyperframes', 'render', '-c', o['html'], '-o', part],
+                              cwd=jobdir(job), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
+        on_proc(pr)
+        for line in pr.stdout:
+            mm = re.search(r'"pct":(\d+)', line)
+            if mm:
+                v = int((k + int(mm.group(1)) / 100) / len(outs) * 100)
+                if v != pct:
+                    pct = v; on_pct(pct)
+                    if not set_status(job, rev, pct=min(99, pct)):  # 그 사이 렌더를 다시 눌렀다: 낡은 렌더는 그만둔다
+                        engine.kill_tree(pr.pid)
+            tail = (tail + [line.rstrip()])[-8:]
+        pr.wait()
+        if get_status(job).get('rev') != rev:
+            return
+        if stopped():
+            set_status(job, rev, state='error', pct=pct, log='멈추기를 눌러 렌더링을 중단했습니다.'); return
+        path = os.path.join(jobdir(job), part)
+        if pr.returncode != 0 or not os.path.exists(path):
+            set_status(job, rev, state='error', pct=pct, log='\n'.join(tail)); return
+        os.replace(path, os.path.join(jobdir(job), o['out'] + '.new'))
+    finalize(job, rev)
+
+
+class PromoQueue:
+    """홍보 영상 렌더를 AI 영상 생성과 같은 대기열에 세운다. 상태는 각 작업의 render.json에 있어 재시작해도 남는다.
+    워커 모드에서는 렌더가 다른 PC에서 돌기 때문에 여기 서지 않는다."""
+
+    def _jobs(self):
+        if WORKER_TOKEN or not os.path.isdir(JOBS):
+            return
+        for j in os.listdir(JOBS):
+            if re.fullmatch(r'[0-9a-f]{12}', j):
+                try:
+                    yield j, get_status(j)
+                except (ValueError, OSError):
+                    continue  # 망가졌거나 지우는 중인 폴더가 대기열 전체를 막으면 안 된다
+
+    def queued(self):
+        return [{'kind': 'promo', 'id': j, 'title': s.get('title') or '홍보 영상', 'at': s.get('queued_at', 0),
+                 'estimate': s.get('length', 30) * 2 * len(s.get('outputs') or [0])}  # 화면 안내와 같은 기준: 영상 길이의 약 2배
+                for j, s in self._jobs() if s['state'] == 'queued']
+
+    def run(self, job, r):
+        rev = get_status(job).get('rev')
+        try:
+            run_render(job, rev, r.set_external_proc, lambda pct: r._set_live(stage='렌더링', fraction=pct / 100), r.stop_event.is_set)
+        except Exception as e:
+            set_status(job, rev, state='error', log=f'{type(e).__name__}: {e}')
+
+    def remove(self, job):
+        s = get_status(job)
+        if s['state'] != 'queued':
+            raise engine.StudioError('대기열에 없는 작업입니다.')
+        set_status(job, s.get('rev'), state='none', pct=0)
+
+    def recover(self):
+        """렌더 도중 서버가 꺼졌으면 다시 대기열로(원래 순서 유지)."""
+        for j, s in self._jobs():
+            if s['state'] == 'running':
+                set_status(j, s.get('rev'), state='queued', pct=0)
+
+
+runner.external = PromoQueue()
+
+
+@app.get('/api/queue')
+def queue():
+    """상단 막대가 쓰는 대기열 상태(읽기 전용). 조작은 /h3/api/queue/*로, 이 PC에서만 된다."""
+    s = runner.snapshot()
+    return jsonify(busy=s['busy'], current=s['current'], queue=s['queue'], paused=s['paused'], pause_reason=s['pause_reason'],
+                   stage=s['live']['stage'], fraction=s['live']['fraction'], local=h3_routes.is_local())
 
 
 def build_from_request(b, **kw):
@@ -529,6 +623,8 @@ def outputs_for(ratio):
 @app.post('/api/render')
 def render():
     b = request.json
+    if not WORKER_TOKEN and not shutil.which('npx'):
+        return jsonify(error='Node.js가 없어 렌더링할 수 없습니다. 상단의 "설치·점검"에서 설치해 주세요.'), 400
     outs = outputs_for(b.get('ratio'))
     try:
         cut = []
@@ -542,9 +638,15 @@ def render():
     except RuntimeError as e:
         return jsonify(error=str(e)), 502
     rev = uuid.uuid4().hex[:8]
-    set_status(b['job'], state='queued', pct=0, log='', rev=rev, queued_at=time.time(), outputs=outs, thumb_t=round(max(1.5, st0 - 0.3), 2))
-    if not WORKER_TOKEN:
-        threading.Thread(target=run_render, args=(b['job'], rev), daemon=True).start()
+    length = max(15, min(600, int(b.get('length', 30))))
+
+    def mark_queued():
+        set_status(b['job'], state='queued', pct=0, log='', rev=rev, queued_at=time.time(), outputs=outs, title=b['plan'].get('title') or '',
+                   length=length, thumb_t=round(max(1.5, st0 - 0.3), 2))
+    if WORKER_TOKEN:
+        mark_queued()
+    else:
+        runner.enqueue_external(mark_queued)
     return jsonify(ok=True, cut=cut)
 
 
@@ -765,7 +867,7 @@ def projects():
 @app.get('/api/project/<job>')
 def project(job):
     m = ensure_media(job); song_beats(job, m)
-    return jsonify(meta=m, plan=load_json(job, 'plan.json'), outputs=done_outputs(job), settings=load_json(job, 'project.json', {}),
+    return jsonify(meta=m, plan=load_json(job, 'plan.json'), outputs=done_outputs(job), render=get_status(job)['state'], settings=load_json(job, 'project.json', {}),
                    video=os.path.exists(os.path.join(jobdir(job), 'output.mp4')))
 
 
@@ -782,6 +884,10 @@ def status(job):
     s = {k: v for k, v in full.items() if k in ('state', 'pct', 'log')}
     if full.get('state') == 'done':
         s['outputs'] = done_outputs(job)
+    if full.get('state') == 'queued' and not WORKER_TOKEN:  # 몇 번째인지, 왜 안 도는지 안내
+        q = runner.snapshot()
+        s.update(ahead=next((i for i, x in enumerate(q['queue']) if x['id'] == job), 0) + (1 if q['busy'] else 0),
+                 paused=q['paused'], pause_reason=q['pause_reason'])
     if WORKER_TOKEN:  # 화면에서 'PC 렌더 프로그램이 꺼져 있음'을 안내할 수 있게
         s.update(mode='worker', worker_online=worker_online(), worker_name=_worker['name'])
     return jsonify(s)
@@ -797,8 +903,57 @@ def index():
     return app.send_static_file('index.html')
 
 
+# ---------- 설치·점검 ----------
+def setup_status():
+    """서비스에 필요한 도구별 상태. 비밀값은 있는지만 본다."""
+    def imports(*names):
+        import importlib.util
+        return all(importlib.util.find_spec(n) for n in names)
+    node_ok = False
+    if shutil.which('node'):
+        try:
+            major = subprocess.run(['node', '-p', "process.versions.node.split('.')[0]"], capture_output=True, text=True, timeout=20).stdout
+            node_ok = int(major) >= 22
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+    h3 = engine.availability()
+    promo = [('Python 패키지', imports('flask', 'PIL', 'edge_tts', 'fontTools', 'numpy', 'cv2'), 'pip install -r requirements.txt'),
+             ('FFmpeg', bool(shutil.which('ffmpeg') and shutil.which('ffprobe')), 'winget install -e --id Gyan.FFmpeg'),
+             ('영상용 글꼴·얼굴 인식 모델', os.path.isdir(os.path.join(HERE, 'fonts')) and os.path.isdir(os.path.join(HERE, 'models')), 'python tools/get_fonts.py'),
+             ('Gemini API 키 (AI 장면 구성)', bool(api_keys()), '.env 파일에 GEMINI_API_KEY=발급받은키')]
+    if not WORKER_TOKEN:
+        promo.insert(1, ('Node.js 22 이상 (렌더링)', node_ok, 'winget install -e --id OpenJS.NodeJS.LTS'))
+    items = [{'group': '홍보 영상', 'name': n, 'ok': bool(ok), 'fix': f} for n, ok, f in promo]
+    items += [{'group': 'AI 영상 생성', 'name': 'NVIDIA GPU (메모리 8GB 이상)', 'ok': h3['gpu_ok'], 'fix': '설치로 해결되지 않습니다. GPU가 없어도 홍보 영상은 쓸 수 있습니다.'},
+              {'group': 'AI 영상 생성', 'name': 'Wan2GP와 모델 (약 60GB)', 'ok': h3['installed'], 'fix': 'setup.bat -H3'}]
+    return {'items': items, 'h3': h3}
+
+
+@app.get('/setup')
+def setup_page():
+    return app.send_static_file('setup.html')
+
+
+@app.get('/api/setup/status')
+def setup_state():
+    return jsonify(dict(setup_status(), local=h3_routes.is_local(), windows=os.name == 'nt'))
+
+
+@app.post('/api/setup/run')
+def setup_run():
+    """설치 스크립트를 이 PC에 새 콘솔 창으로 띄운다. 인자는 고정값만 쓴다."""
+    if not h3_routes.is_local() or os.name != 'nt':
+        abort(403)
+    args = ['-H3'] if (request.json or {}).get('h3') else []
+    subprocess.Popen(['cmd', '/c', 'start', 'createMovie setup', os.path.join(HERE, 'setup.bat')] + args, cwd=HERE)
+    return jsonify(ok=True)
+
+
 os.makedirs(JOBS, exist_ok=True)
 
 if __name__ == '__main__':
-    # HOST=0.0.0.0 이면 같은 네트워크의 다른 기기(폰 등)에서 접속 가능
-    app.run(host=env('HOST') or '127.0.0.1', port=int(env('PORT') or 5000), threaded=True)
+    runner.recover()
+    # HOST=0.0.0.0 이면 같은 네트워크의 다른 기기(폰 등)에서 접속 가능. AI 영상 생성은 그래도 이 PC에서만 된다.
+    port = int(env('PORT') or 5000)
+    threading.Timer(1.0, webbrowser.open, [f'http://127.0.0.1:{port}']).start()
+    app.run(host=env('HOST') or '127.0.0.1', port=port, threaded=True, use_reloader=False)

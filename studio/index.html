@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>H3 Studio</title>
+<title>AI 영상 생성</title>
 <style>
 :root { --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --muted:#667085; --line:#dfe3ea; --accent:#3257d6; --ok:#12805c; --warn:#a15c00; --bad:#c62f2f; --soft:#eef1f6; }
 @media (prefers-color-scheme: dark) { :root { --bg:#14171d; --card:#1d212a; --ink:#e7eaf0; --muted:#98a2b3; --line:#323844; --accent:#7f9cff; --ok:#4cc79c; --warn:#e6a94f; --bad:#f07878; --soft:#272c37; } }
@@ -57,13 +57,13 @@ ol.steps { padding-left:20px; margin:0; }
 </style>
 </head>
 <body>
+<script src="/nav.js"></script>
 <header>
-  <h1>H3 Studio</h1>
+  <h1>AI 영상 생성</h1>
   <div class="gpuhead" id="gpuhead">GPU 확인 중</div>
 </header>
 <div class="layout">
   <aside>
-    <div class="card" id="queue" hidden></div>
     <div class="card">
       <button class="primary" id="newBtn" style="width:100%;margin-bottom:12px">새 영상 만들기</button>
       <h2>프로젝트</h2>
@@ -71,6 +71,7 @@ ol.steps { padding-left:20px; margin:0; }
     </div>
   </aside>
   <main>
+    <div id="unavailable" class="card" hidden></div>
     <div id="live" class="card" hidden></div>
     <section id="create">
       <div class="card">
@@ -127,14 +128,14 @@ const fill = (box, ...kids) => box.replaceChildren(...kids.filter(k => k !== nul
 async function api(path, data) {
   const opts = data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
   let res;
-  try { res = await fetch(path, opts); } catch { throw new Error('Studio 서버에 연결할 수 없습니다. 창이 꺼졌는지 확인하세요.'); }
+  try { res = await fetch('/h3' + path, opts); } catch { throw new Error('서버에 연결할 수 없습니다. 창이 꺼졌는지 확인하세요.'); }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json.error || `서버 오류 (${res.status})`);
   return json;
 }
 const fmtTime = s => { if (s == null || !isFinite(s)) return '-'; s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m ? `${m}분 ${s % 60}초` : `${s}초`; };
 const STATUS = { ready:'준비됨', queued:'대기 중', preflight:'점검 중', running:'생성 중', done:'완료', failed:'실패', stopped:'멈춤', interrupted:'중단됨' };
-const PHASE = { preflight:'시작 전 점검', cooling:'GPU 식히는 중', rendering:'장면 생성', music:'배경음악 생성', joining:'영상 합치기', done:'완료', failed:'실패', stopped:'멈춤' };
+const PHASE = { preflight:'시작 전 점검', cooling:'GPU 식히는 중', rendering:'장면 생성', music:'배경음악 생성', promo:'홍보 영상 렌더링', joining:'영상 합치기', done:'완료', failed:'실패', stopped:'멈춤' };
 const STAGE = { 'Denoising':'이미지 생성(디노이징)', 'VAE Decoding':'영상 디코딩', 'Encoding Text Prompt':'프롬프트 분석' };
 const stageName = s => STAGE[s] || (s.startsWith('Loading') ? '모델 불러오기' : s.startsWith('Saving') ? '파일 저장' : s.startsWith('Decoding') ? '소리 디코딩' : s);
 let options = {}, current = null, currentView = null, status = {}, lastCheck = '', renderedKey = '';
@@ -203,9 +204,10 @@ function renderDetail() {
         el('button', { textContent: '점검만 실행', on: { click: runCheck } })),
       el('div', { id: 'checkBox', class: 'checks' })),
     p.has_final ? el('div', { class: 'card final' }, el('h2', { textContent: '최종 영상 검수' }),
-      el('video', { controls: true, loop: p.loop, preload: 'metadata', src: `/media/${p.id}/final.mp4?t=${p.final_stamp}` }),
+      el('video', { controls: true, loop: p.loop, preload: 'metadata', src: `/h3/media/${p.id}/final.mp4?t=${p.final_stamp}` }),
       el('div', { class: 'row', style: 'margin-top:8px' },
-        el('button', { class: 'primary', textContent: '폴더에서 보기', on: { click: () => api(`/api/projects/${p.id}/reveal`, {}).catch(e => message($('checkBox'), e.message, 'bad')) } })),
+        el('button', { class: 'primary', textContent: '폴더에서 보기', on: { click: () => api(`/api/projects/${p.id}/reveal`, {}).catch(e => message($('checkBox'), e.message, 'bad')) } }),
+        el('button', { textContent: '홍보 영상에 넣기', title: '이 영상을 클립으로 넣은 새 홍보 영상 프로젝트를 만듭니다', on: { click: () => toPromo(p.id) } })),
       el('div', { class: 'muted', style: 'margin-top:6px', textContent: p.final_path })) : null,
     el('div', { class: 'card' }, el('h2', { textContent: '장면' }),
       el('div', { class: 'scenes' }, ...p.scenes.map(s => sceneCard(p, s, mine)))),
@@ -226,11 +228,19 @@ function sceneCard(p, s, busy) {
   };
   return el('div', { class: `scene${active ? ' active' : ''}` },
     el('h3', {}, `장면 ${s.index}`, el('span', { class: `tag ${s.done ? 'done' : active ? 'active' : ''}`, textContent: s.done ? `완료 · ${fmtTime(s.render_seconds)}` : active ? '생성 중' : `${s.seconds.toFixed(1)}초 · 대기` })),
-    s.done ? el('video', { controls: true, preload: 'metadata', src: `/media/${p.id}/scene/${s.index}.mp4?t=${s.stamp}` }) : null,
+    s.done ? el('video', { controls: true, preload: 'metadata', src: `/h3/media/${p.id}/scene/${s.index}.mp4?t=${s.stamp}` }) : null,
     el('label', { style: 'margin-top:8px' }, '동작', action), el('label', {}, '효과음', sound), el('label', {}, '길이(초)', seconds), err,
     el('div', { class: 'row' },
       el('button', { textContent: '수정 저장', disabled: busy, on: { click: () => save(false) } }),
       el('button', { textContent: '다른 결과로', title: '내용은 그대로 두고 시드를 바꿉니다', disabled: busy, on: { click: () => save(true) } })));
+}
+async function toPromo(id) {
+  try {
+    const res = await fetch(`/api/from_h3/${id}`, { method: 'POST' });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || `서버 오류 (${res.status})`);
+    location.href = `/?open=${json.job}`;
+  } catch (e) { message($('checkBox'), e.message, 'bad'); }
 }
 async function startRun(id) {
   try { await api(`/api/projects/${id}/start`, {}); renderedKey = ''; await poll(); }
@@ -239,20 +249,9 @@ async function startRun(id) {
 async function stopRun() { await api('/api/stop', {}); await poll(); }
 async function dequeue(id) { await api(`/api/projects/${id}/dequeue`, {}); renderedKey = ''; await poll(); await refreshProjects(); }
 let queueKey = '';
-function renderQueue() {
-  const q = status.queue || [], key = JSON.stringify([q, status.paused, status.pause_reason]);
-  if (key === queueKey) return;
-  queueKey = key;
-  refreshProjects();
-  const box = $('queue');
-  box.hidden = !q.length;
-  fill(box,
-    el('h2', { textContent: `대기열 ${q.length}개 · 약 ${fmtTime(q.reduce((a, x) => a + x.estimate, 0))}` }),
-    status.paused ? el('div', { class: 'msg warn', textContent: status.pause_reason }) : null,
-    status.paused ? el('button', { class: 'primary', textContent: '재개', style: 'width:100%;margin-bottom:8px', on: { click: async () => { await api('/api/queue/resume', {}); await poll(); } } }) : null,
-    ...q.map((x, i) => el('div', { class: 'row', style: 'align-items:center;margin-bottom:6px;flex-wrap:nowrap' },
-      el('a', { href: '#', style: 'flex:1;min-width:0;overflow-wrap:anywhere', textContent: `${i + 1}. ${x.title}`, on: { click: e => { e.preventDefault(); openProject(x.id); } } }),
-      el('button', { textContent: '빼기', on: { click: () => dequeue(x.id).catch(() => {}) } }))));
+function renderQueue() {  // The queue itself lives in the shared top bar (nav.js).
+  const key = JSON.stringify(status.queue || []);
+  if (key !== queueKey) { queueKey = key; refreshProjects(); }
 }
 async function runCheck() {
   const box = $('checkBox'); message(box, '점검 중입니다. 30초 정도 걸릴 수 있습니다.');
@@ -288,7 +287,7 @@ function renderLive() {
     el('h2', { textContent: `${PHASE[l.phase] || l.phase}${l.scene ? ` · 장면 ${l.scene}` : ''}` }),
     el('div', { textContent: `${stageName(l.stage || '')} ${l.fraction ? `${Math.round(frac * 100)}%` : ''}` }),
     el('div', { class: 'bar' }, el('div', { style: `width:${frac * 100}%` })),
-    el('div', { class: 'muted', textContent: `경과 ${fmtTime(Date.now() / 1000 - l.started)} · 남은 시간 약 ${fmtTime(remaining)}${status.project !== current ? ` · 다른 프로젝트 생성 중` : ''}` }),
+    el('div', { class: 'muted', textContent: `경과 ${fmtTime(Date.now() / 1000 - l.started)} · 남은 시간 약 ${fmtTime(remaining)}${status.current && status.project !== current ? ` · 지금 작업: ${status.current.title}` : ''}` }),
     el('div', { class: 'stats' },
       el('div', { class: `stat${hot ? ' hot' : ''}` }, el('b', { textContent: g ? `${g.temp}°C` : '-' }), el('span', { textContent: `온도 (${options.stop_temp}°C에 중단)` })),
       el('div', { class: 'stat' }, el('b', { textContent: g && g.power != null ? `${Math.round(g.power)}W` : '-' }), el('span', { textContent: '전력' })),
@@ -360,14 +359,30 @@ $('queueBtn').onclick = async () => {  // Stays on this page, so the next script
     await poll(); await refreshProjects();
   } catch (e) { message($('checkOut'), e.message, 'bad'); }
 };
+function showUnavailable(state) {  // Finished videos stay viewable. Only making new ones is closed.
+  const lines = state.local ? state.reasons : ['AI 영상 생성은 서비스가 실행 중인 PC에서만 쓸 수 있습니다. 그 PC의 브라우저에서 접속하세요.'];
+  fill($('unavailable'), el('h2', { textContent: '이 환경에서는 H3 영상을 생성할 수 없습니다' }),
+    ...lines.map(r => el('div', { class: 'msg warn', textContent: r })),
+    el('div', { class: 'muted', textContent: '사진으로 만드는 홍보 영상은 GPU 없이도 쓸 수 있습니다.' }),
+    el('div', { class: 'row', style: 'margin-top:10px' },
+      el('a', { href: '/', textContent: '홍보 영상으로 이동' }), state.local ? el('a', { href: '/setup', textContent: '설치·점검 안내 보기' }) : null));
+  $('unavailable').hidden = false;
+  $('create').hidden = true; $('newBtn').hidden = true;
+}
 (async () => {
   try {
+    const state = await fetch('/h3/api/availability').then(r => r.json());
+    if (!state.ok || !state.local) showUnavailable(state);
+    if (!state.local) { $('gpuhead').textContent = ''; return; }
+    if (!state.ok) { $('gpuhead').textContent = ''; await refreshProjects(); return; }
     options = await api('/api/options');
     $('size').replaceChildren(...Object.entries(options.presets).map(([v, p]) => el('option', { value: v, textContent: `${p.label}, 장면당 최대 ${p.max_seconds}초` })));
     loadSettings();
     await refreshProjects();
     await poll();
-    if (status.busy && status.project) await openProject(status.project);
+    const open = new URLSearchParams(location.search).get('open');
+    if (open) await openProject(open);
+    else if (status.busy && status.project) await openProject(status.project);
   } catch (e) { $('gpuhead').textContent = e.message; }
   setInterval(poll, 2000);
 })();

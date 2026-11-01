@@ -1,27 +1,35 @@
-"""H3 Studio web server. Local only: it starts GPU jobs, so it refuses requests from other sites and hosts."""
-import random, subprocess, threading, webbrowser
+"""AI video (H3) routes under /h3. The page and its availability notice are open to anyone who can reach the server,
+but everything else starts GPU jobs or opens local files, so it refuses other machines and other sites."""
+import random, subprocess
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
 
-import engine
+from . import engine
 
-PORT = 7870
 HERE = Path(__file__).resolve().parent
-app = Flask(__name__)
-app.json.sort_keys = False  # Keeps the presets in their declared order, with the tested default first.
+app = Blueprint("h3", __name__, url_prefix="/h3")
 runner = engine.Runner()
-ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+PUBLIC = {"h3.index", "h3.availability"}
+
+
+def is_local():
+    # The host and origin checks block DNS rebinding and other sites' pages from starting renders through the browser.
+    origin = request.headers.get("Origin")
+    return (request.remote_addr in ("127.0.0.1", "::1") and request.host.rsplit(":", 1)[0] in ("127.0.0.1", "localhost")
+            and (not origin or origin.split("//")[-1] == request.host))
 
 
 @app.before_request
 def local_only():
-    # Blocks DNS rebinding and other sites' pages from starting renders through the browser.
-    if request.host not in ALLOWED_HOSTS:
+    if request.endpoint not in PUBLIC and not is_local():
         abort(403)
-    origin = request.headers.get("Origin")
-    if origin and origin.split("//")[-1] not in ALLOWED_HOSTS:
-        abort(403)
+
+
+def require_available():
+    state = engine.availability()
+    if not state["ok"]:
+        raise engine.StudioError(" ".join(state["reasons"]))
 
 
 @app.errorhandler(engine.StudioError)
@@ -60,6 +68,11 @@ def project_view(project):
 @app.get("/")
 def index():
     return send_from_directory(HERE, "index.html")
+
+
+@app.get("/api/availability")
+def availability():
+    return jsonify(dict(engine.availability(), local=is_local()))
 
 
 @app.get("/api/options")
@@ -110,6 +123,7 @@ def create():
         raise engine.StudioError(" / ".join(errors))
     project = engine.create_project(clean, d["size"], d.get("loop"))
     if d.get("queue"):
+        require_available()
         runner.enqueue(project["id"])
     return jsonify(id=project["id"])
 
@@ -121,6 +135,7 @@ def project(pid):
 
 @app.post("/api/projects/<pid>/start")
 def start(pid):
+    require_available()
     runner.enqueue(pid)
     return jsonify(ok=True)
 
@@ -134,6 +149,16 @@ def dequeue(pid):
 @app.post("/api/queue/resume")
 def resume_queue():
     runner.resume_queue()
+    return jsonify(ok=True)
+
+
+@app.post("/api/queue/remove")
+def remove_from_queue():
+    d = body()
+    if d.get("kind") == "h3":
+        runner.dequeue(str(d.get("id")))
+    else:
+        runner.remove_external(str(d.get("id")))
     return jsonify(ok=True)
 
 
@@ -217,9 +242,3 @@ def send_media(path):
     if not path.is_file():
         abort(404)
     return send_file(path, conditional=True, max_age=0)
-
-
-if __name__ == "__main__":
-    runner.recover()
-    threading.Timer(1.0, webbrowser.open, [f"http://127.0.0.1:{PORT}"]).start()
-    app.run(host="127.0.0.1", port=PORT, threaded=True, use_reloader=False)

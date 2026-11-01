@@ -313,6 +313,7 @@
 </style>
 </head>
 <body>
+<script src="/nav.js"></script>
 <header class="top"><div class="top-in">
   <div class="brand"><i></i>홍보영상 스튜디오</div>
   <nav class="stepper" id="stepper" aria-label="진행 단계">
@@ -484,7 +485,7 @@
 
   <!-- ④ 완성 -->
   <section id="s4" hidden>
-    <div class="head"><h1 id="h4">영상을 만들고 있어요</h1><p id="p4">창을 닫지 말고 기다려 주세요. 영상 길이의 약 2배 시간이 걸립니다.</p></div>
+    <div class="head"><h1 id="h4">영상을 만들고 있어요</h1><p id="p4">영상 길이의 약 2배 시간이 걸려요. 창을 닫아도 계속 만들어지고, 내 프로젝트에서 다시 열 수 있어요.</p></div>
     <div class="panel render" id="rendering">
       <div class="pct mono"><span id="rpct">0</span><small>%</small></div>
       <div class="track"><i id="rbar"></i></div>
@@ -631,6 +632,7 @@ async function openProject(j) {
   if (meta.audio) await initMusic(); else syncLen();
   if (plan) { renderPlan(); go(3); } else go(meta.photos.length ? 2 : 1);
   loading = false; summary(); $('#saved').textContent = '불러옴';
+  if (r.render === 'queued' || r.render === 'running') watchRender();
 }
 function newProject() {
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
@@ -1213,6 +1215,9 @@ $('#to4').onclick = async () => {
   if (!planOk()) return;
   const r = await post('/api/render', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
   if (r.error) { $('#e3').textContent = r.error; return; }
+  watchRender();
+};
+function watchRender() {   // 렌더 요청 직후, 또는 렌더 중인 프로젝트를 다시 열었을 때
   $('#result').hidden = true; $('#rendering').hidden = false; $('#rbar').style.width = '0'; $('#rpct').textContent = '0';
   $('#h4').textContent = '영상을 만들고 있어요'; $('#p4').hidden = false;
   go(4);
@@ -1223,6 +1228,13 @@ $('#to4').onclick = async () => {
     const sec = (Date.now() - t0) / 1000;
     $('#rbar').style.width = s.pct + '%'; $('#rpct').textContent = s.pct;
     $('#rmeta').textContent = `경과 ${fmt(sec).replace(/\.\d$/, '')}` + (s.pct > 5 && s.pct < 100 ? ` · 남은 시간 약 ${fmt(sec * (100 - s.pct) / s.pct).replace(/\.\d$/, '')}` : '');
+    if (s.state === 'queued' && s.mode !== 'worker') {
+      $('#rmeta').textContent = s.paused ? `대기열이 멈춰 있어요. 상단 대기열에서 재개해 주세요. (${s.pause_reason})`
+        : s.ahead ? `대기열 ${s.ahead + 1}번째예요. 앞 작업이 끝나면 자동으로 시작합니다.` : '곧 시작합니다…';
+    }
+    if (s.state === 'none') {   // 대기열에서 뺐다
+      clearInterval(poll); $('#e3').textContent = '렌더링을 대기열에서 뺐습니다.'; go(3); return;
+    }
     if (s.mode === 'worker') {   // 렌더링은 PC 워커가 한다
       $('#p4').textContent = '렌더링은 PC에서 진행돼요. 이 창을 닫아도 계속 만들어지고, 나중에 프로젝트 목록에서 확인할 수 있어요.';
       if (s.state === 'queued') $('#rmeta').textContent = s.worker_online
@@ -1239,7 +1251,7 @@ $('#to4').onclick = async () => {
       $('#e4').textContent = '렌더링 중 오류가 났습니다. 구성으로 돌아가 다시 시도해 주세요.\n\n' + (s.log || '');
     }
   }, 1500);
-};
+}
 $('#newVideo').onclick = newProject;
 function showOutputs(outs) {   // 완성 영상(가로·세로)과 썸네일
   const name = ((plan && plan.title) || '홍보영상').replace(/[\\/:*?"<>|]/g, ''), t = Date.now(), two = outs.length > 1;
@@ -1252,6 +1264,7 @@ function showOutputs(outs) {   // 완성 영상(가로·세로)과 썸네일
   }).join('') || '<div class="empty">완성된 영상 파일을 찾지 못했습니다.</div>';
 }   // 지금 프로젝트는 저장된 채로 두고 새로 시작
 go(1); renderAssets();
+{ const o = new URLSearchParams(location.search).get('open'); if (o) openProject(o); }
 </script>
 </body>
 </html>

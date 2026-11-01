@@ -320,6 +320,118 @@ def check_queue():
     engine.PROJECTS = saved
 
 
+def check_shared_queue():
+    """H3 projects and external work wait in one line, oldest first, and never run at the same time."""
+    saved = engine.PROJECTS
+
+    class Fake:
+        def __init__(self): self.items, self.ran, self.boom = {}, [], False
+        def queued(self): return [dict(kind="promo", id=k, title=k, estimate=1, at=v) for k, v in self.items.items()]
+        def remove(self, item_id): self.items.pop(item_id)
+        def recover(self): self.recovered = True
+
+        def run(self, item_id, runner):
+            assert sum(1 for x in log if x.endswith("+")) == sum(1 for x in log if x.endswith("-")), "overlap"
+            log.append(item_id + "+")
+            time.sleep(0.05)
+            self.items.pop(item_id)
+            log.append(item_id + "-")
+            if self.boom:
+                self.items[item_id] = 0
+                raise RuntimeError("x")
+
+    log = []
+
+    class FakeRunner(engine.Runner):
+        def _check_ready(self, project):
+            assert sum(1 for x in log if x.endswith("+")) == sum(1 for x in log if x.endswith("-")), "overlap"
+            log.append(project["script"]["title"] + "+")
+            time.sleep(0.05)
+            log.append(project["script"]["title"] + "-")
+
+        def _render_scenes(self, project): pass
+        def _make_music(self, project): pass
+        def _join(self, project): pass
+
+    def wait_idle(r):
+        for _ in range(300):
+            if not r.busy():
+                return
+            time.sleep(0.02)
+        raise AssertionError("runner did not go idle")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        engine.PROJECTS = Path(tmp)
+        make = lambda t: engine.create_project(engine.validate_script(dict(SCRIPT, title=t), "480x832")[0], "480x832", False)["id"]
+        r, f = FakeRunner(), Fake()
+        r.external = f
+        a, b = make("a"), make("b")
+        r.enqueue(a)
+        time.sleep(0.01)
+        r.enqueue_external(lambda: f.items.__setitem__("p1", time.time()))
+        time.sleep(0.01)
+        r.enqueue(b)
+        time.sleep(0.01)
+        r.enqueue_external(lambda: f.items.__setitem__("p2", time.time()))
+        snap = r.snapshot()
+        assert [x["id"] for x in snap["queue"]] == ["p1", b, "p2"] and snap["current"]["id"] == a, snap["queue"]
+        r.remove_external("p2")
+        wait_idle(r)
+        time.sleep(0.1)
+        wait_idle(r)
+        assert log == ["a+", "a-", "p1+", "p1-", "b+", "b-"], log
+
+        # Work that needs no GPU must not look like H3 to the pages or to the GPU watchdog.
+        f.items["slow"] = time.time()
+        gate = threading.Event()
+        f.run = lambda item_id, runner: (gate.wait(5), f.items.pop(item_id))
+        with r.lock:
+            r._dispatch()
+        snap = r.snapshot()
+        assert snap["busy"] and snap["project"] is None and snap["current"]["kind"] == "promo" and r.proc is None
+        gate.set()
+        wait_idle(r)
+
+        # A failure external.run could not record stays waiting, so it must hold the queue instead of retrying forever.
+        del f.run
+        f.boom = True
+        r.enqueue_external(lambda: f.items.__setitem__("p3", time.time()))
+        wait_idle(r)
+        time.sleep(0.05)
+        assert r.paused and "RuntimeError" in r.pause_reason
+    engine.PROJECTS = saved
+
+
+def check_availability():
+    saved = engine.gpu_sample, engine.shutil.which, engine.PY, engine.WAN, engine.os.name
+    try:
+        engine.os.name = "nt"
+        engine.shutil.which = lambda c: None
+        state = engine.availability()
+        assert not state["ok"] and not state["gpu_ok"] and "NVIDIA" in state["reasons"][0]
+
+        engine.shutil.which = lambda c: "nvidia-smi"
+        engine.gpu_sample = lambda: None
+        assert "재부팅" in engine.availability()["reasons"][0]  # A crash must not read as "no GPU".
+
+        engine.gpu_sample = lambda: {"mem_total": 4096.0}
+        assert "4GB" in engine.availability()["reasons"][0]
+
+        engine.gpu_sample = lambda: {"mem_total": 8192.0}
+        with tempfile.TemporaryDirectory() as tmp:
+            wan = Path(tmp)
+            engine.WAN, engine.PY = wan, wan / "py.exe"
+            state = engine.availability()
+            assert state["gpu_ok"] and not state["installed"] and not state["ok"] and "설치" in state["reasons"][0]
+            for f in (wan / "py.exe", wan / "wgp.py"):
+                f.write_text("")
+            (wan / "ckpts").mkdir()
+            (wan / "ckpts" / engine.MODEL_FILE).write_text("")
+            assert engine.availability() == {"ok": True, "gpu_ok": True, "installed": True, "reasons": []}
+    finally:
+        engine.gpu_sample, engine.shutil.which, engine.PY, engine.WAN, engine.os.name = saved
+
+
 def check_llm_prompt():
     text = engine.llm_prompt("chick", "kids", "3D", 4, 20, "480x832", True)
     assert "vertical 9:16" in text and '"scenes"' in text and "loops" in text
