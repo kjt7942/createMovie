@@ -476,6 +476,8 @@ function showUnavailable(state) {  // Finished videos stay viewable. Only making
   try {
     const state = await fetch('/h3/api/availability').then(r => r.json());
     if (!state.ok || !state.local) showUnavailable(state);
+    if (state.ok && state.local && state.license_notice)  // Informs only: generation stays allowed.
+      $('create').prepend(el('div', { class: 'msg warn', id: 'licenseNotice', textContent: state.license_notice }));
     if (!state.local) { $('gpuhead').textContent = ''; return; }
     if (!state.ok) { $('gpuhead').textContent = ''; await refreshProjects(); return; }
     options = await api('/api/options');

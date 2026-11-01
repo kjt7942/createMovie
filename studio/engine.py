@@ -74,15 +74,17 @@ def _env(name):
     return v or ""
 
 
-def license_block():
-    """Why the H3 license forbids use here, or '' when it allows it."""
+def license_notice():
+    """A warning shown above the create form when the H3 license does not cover this region, or ''.
+    It only informs: generation stays allowed, and the user decides."""
     if _env("H3_LICENSE_GRANTED").strip() == "1":
         return ""
     region = _env("H3_LICENSE_REGION").strip().upper() or "KR"
     if region not in H3_EXCLUDED_REGIONS:
         return ""
-    return ("MiniMax H3 라이선스는 대한민국·미국·영국·EU에서 모델과 생성 영상의 사용을 허용하지 않아 AI 영상 생성을 막아 두었습니다. "
-            "MiniMax(api@minimax.io)에서 별도 라이선스를 받았다면 .env에 H3_LICENSE_GRANTED=1을 넣으세요.")
+    return ("MiniMax H3 라이선스는 대한민국·미국·영국·EU에서 모델과 생성 영상의 사용을 허용하지 않습니다. "
+            "공모전 출품이나 외부 게시용 영상에는 쓰지 마세요. "
+            "MiniMax(api@minimax.io)에서 별도 라이선스를 받았다면 .env에 H3_LICENSE_GRANTED=1을 넣으면 이 안내가 사라집니다.")
 
 
 ID_RE = re.compile(r"^[0-9a-f]{12}$")
@@ -925,14 +927,11 @@ def _check_availability():
         elif gpu["mem_total"] is not None and gpu["mem_total"] < MIN_VRAM_MB:
             reasons.append(f"GPU 메모리가 {gpu['mem_total'] / 1024:.0f}GB입니다. AI 영상 생성에는 8GB 이상이 필요합니다.")
     gpu_ok = not reasons
-    blocked = license_block()
     installed = PY.is_file() and (WAN / "wgp.py").is_file() and (WAN / "ckpts" / MODEL_FILE).is_file()
     if gpu_ok and not installed:
         reasons.append("AI 영상 생성 도구(Wan2GP와 모델)가 설치되어 있지 않습니다. 설치·점검 화면에서 설치하세요.")
-    if blocked:
-        reasons.append(blocked)
-    return {"ok": gpu_ok and installed and not blocked, "gpu_ok": gpu_ok, "installed": installed, "reasons": reasons,
-            "license_ok": not blocked,
+    return {"ok": gpu_ok and installed, "gpu_ok": gpu_ok, "installed": installed, "reasons": reasons,
+            "license_notice": license_notice(),
             "ref_installed": (WAN / "ckpts" / REF_MODEL_FILE).is_file()}
 
 

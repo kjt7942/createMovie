@@ -26,7 +26,7 @@
 ## 라이선스 주의 (외부 게시·공모전) — 2026-11-02 확인
 | 도구 | 라이선스 | 이 서비스에서 |
 | --- | --- | --- |
-| MiniMax H3 (AI 영상) | MiniMax H3 Community License — 대한민국·미국·영국·EU 제외 | 기본으로 생성을 막음. 별도 라이선스가 있으면 `.env`에 `H3_LICENSE_GRANTED=1`, 제외 지역 밖 PC는 `H3_LICENSE_REGION=JP` 처럼 지정 |
+| MiniMax H3 (AI 영상) | MiniMax H3 Community License — 대한민국·미국·영국·EU 제외 | 생성은 허용하고, 생성 화면에 라이선스 안내를 띄움. 공모전·외부 게시용으로는 쓰지 말 것. 별도 라이선스가 있으면 `.env`에 `H3_LICENSE_GRANTED=1`, 제외 지역 밖 PC는 `H3_LICENSE_REGION=JP`처럼 지정하면 안내가 사라짐 |
 | edge-tts (내레이션) | 코드 GPL-3.0, 음성은 MS Edge 읽기 서비스 | 상업 이용 허락이 불명확. 공모전·유료 게시물은 MIT인 MeloTTS 등으로 교체 권장 |
 | Stable Audio 3 (AI 음악) | Stability AI Community License | 연매출 100만 달러 미만 무료, 상업 이용 시 등록 필요. MIT인 ACE-Step 1.5로 대체 가능 |
 | Gemini API 무료 등급 | Gemini API 약관 | 입력·출력이 구글 학습과 사람 검토에 쓰임. 미공개 작품은 유료 등급 권장 |
