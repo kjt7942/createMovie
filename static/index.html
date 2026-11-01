@@ -358,7 +358,7 @@
         <label class="switch"><input type="checkbox" id="blurOn">사진·동영상 속 얼굴 흐리게(모자이크) <small style="color:var(--mute);margin-left:6px">외부 게시용 · 자동 감지라 놓칠 수 있어 완성본을 확인하세요 · 동영상은 처음 한 번 시간이 걸려요</small></label></div>
       <div class="field"><span>AI 활용 고지</span>
         <label class="switch"><input type="checkbox" id="discOn">엔딩 화면에 고정 안내문 넣기 <small style="color:var(--mute);margin-left:6px">공모전·외부 게시용 · 엔딩 내내 화면 위쪽에 표시</small></label>
-        <input class="input" id="discText" maxlength="60" value="본 영상은 생성형 AI를 활용하여 제작되었습니다." aria-label="고정 안내문" hidden></div>
+        <input class="input" id="discText" maxlength="60" value="본 영상은 생성형 AI를 활용해 제작되었습니다." aria-label="고정 안내문" hidden></div>
       <div class="field"><span>영상 길이</span>
         <div class="len-row">
           <div class="seg" id="lenPresets"><button data-len="15">15초</button><button data-len="30" aria-pressed="true">30초</button><button data-len="60">1분</button><button data-len="120">2분</button></div>
@@ -704,7 +704,7 @@ const mood = () => $('#mood button[aria-pressed="true"]').textContent;
 const ratio = () => $('#ratio button[aria-pressed="true"]').dataset.r;
 const styleSel = () => $('#style button[aria-pressed="true"]').dataset.st;
 const logoMode = () => $('#logoMode button[aria-pressed="true"]').dataset.lm;
-const DISC_DEFAULT = '본 영상은 생성형 AI를 활용하여 제작되었습니다.';
+const DISC_DEFAULT = '본 영상은 생성형 AI를 활용해 제작되었습니다.';
 const discOut = () => $('#discOn').checked ? ($('#discText').value.trim() || DISC_DEFAULT) : '';
 function discIn(t) { $('#discOn').checked = !!t; $('#discText').value = t || DISC_DEFAULT; $('#discText').hidden = !t; }
 const planOut = () => ({...plan, blur: $('#blurOn').checked, logo: logoMode(), disclaimer: discOut()});   // 서버로 보낼 구성(옵션 포함)

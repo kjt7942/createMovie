@@ -2,7 +2,7 @@
 import re, tempfile
 import composer
 
-DISC = '본 영상은 생성형 AI를 활용하여 제작되었습니다.'
+DISC = '본 영상은 생성형 AI를 활용해 제작되었습니다.'
 plan = {'year': '2026', 'title': '고지 테스트', 'tagline': '슬로건', 'org': '테스트센터', 'intro_photo': 'a', 'outro_photo': 'a',
         'scenes': [{'ttl': '장면', 'sub': '설명', 'photo': 'a'}], 'outro': ['끝', '감사합니다', '마무리']}
 photos = {'a': {'id': 'a', 'w': 1920, 'h': 1080}}

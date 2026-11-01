@@ -406,7 +406,7 @@ DISC_MAX = 60  # 공모전 AI 고지 문구 같은 고정 안내문 최대 글�
 
 
 def disclaimer_text(p):
-    """plan의 고정 안내문(예: '본 영상은 생성형 AI를 활용하여 제작되었습니다.'). 없으면 ''."""
+    """plan의 고정 안내문(예: '본 영상은 생성형 AI를 활용해 제작되었습니다.'). 없으면 ''."""
     t = p.get('disclaimer')
     return ' '.join(t.split())[:DISC_MAX] if isinstance(t, str) else ''
 
