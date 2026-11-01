@@ -1,5 +1,5 @@
 """Checks the logic that needs no GPU. Run: python studio/test_engine.py"""
-import json, tempfile, threading, time
+import json, os, tempfile, threading, time
 from pathlib import Path
 
 import engine
@@ -467,8 +467,10 @@ def check_stop_and_removal():
 def check_availability():
     saved = engine.gpu_sample, engine.shutil.which, engine.PY, engine.WAN, engine.os.name
     cached = engine.availability
+    env = {k: os.environ.pop(k, None) for k in ("H3_LICENSE_REGION", "H3_LICENSE_GRANTED")}
     try:
         engine.availability = engine._check_availability  # The 5s cache would hide every change below.
+        os.environ["H3_LICENSE_GRANTED"] = "1"  # The hardware checks below are about this PC, not the license.
         engine.os.name = "nt"
         engine.shutil.which = lambda c: None
         state = engine.availability()
@@ -493,10 +495,25 @@ def check_availability():
             (wan / "ckpts" / engine.MODEL_FILE).write_text("")
             state = engine.availability()
             assert state.pop("ref_installed") is False
-            assert state == {"ok": True, "gpu_ok": True, "installed": True, "reasons": []}
+            assert state == {"ok": True, "gpu_ok": True, "installed": True, "reasons": [], "license_ok": True}
+
+            # The H3 license excludes Korea, the US, the UK and the EU: by default (Korea) generation is blocked.
+            del os.environ["H3_LICENSE_GRANTED"]
+            state = engine.availability()
+            assert not state["ok"] and not state["license_ok"] and state["installed"] and "라이선스" in state["reasons"][-1]
+            for region, allowed in (("kr", False), ("DE", False), ("US", False), ("JP", True), ("SG", True)):
+                os.environ["H3_LICENSE_REGION"] = region
+                assert engine.availability()["ok"] is allowed, region
+            os.environ["H3_LICENSE_REGION"] = "KR"
+            os.environ["H3_LICENSE_GRANTED"] = "1"  # A separate license from MiniMax lifts the block.
+            assert engine.availability()["ok"]
     finally:
         engine.gpu_sample, engine.shutil.which, engine.PY, engine.WAN, engine.os.name = saved
         engine.availability = cached
+        for k, v in env.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
 
 
 def check_gpu_limits():

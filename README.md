@@ -18,9 +18,21 @@
 - **세로 자동 맞춤**: 얼굴 위치를 기준으로 잘라 쇼츠·릴스에서 인물이 잘리지 않게 합니다.
 - **로고**: 기관 로고를 올리면 오프닝·엔딩과 장면 구석에 넣어요(흰 배경 자동 제거).
 - **자막**: 내레이션을 화면 자막으로 함께 넣어요(소리 없이 보는 SNS용).
+- **AI 활용 고지**: 엔딩 내내 화면 위쪽에 고정 안내문(기본값 "본 영상은 생성형 AI를 활용하여 제작되었습니다.")을 넣어요. 공모전·외부 게시용.
 - **가로 + 세로 동시 출력**: 한 번에 두 영상과 각각의 썸네일 이미지를 만듭니다.
 - 글꼴은 `python tools/get_fonts.py`로 한 번 내려받으면(도커는 자동), 영상에 쓰인 글자만 잘라 넣기 때문에 렌더하는 PC에 글꼴을 설치할 필요가 없습니다.
 - 배경음악이 없을 때는 `python tools/make_bgm.py bgm.wav 40`으로 저작권 걱정 없는 경쾌한 음악(128BPM)을 만들 수 있어요.
+
+## 라이선스 주의 (외부 게시·공모전) — 2026-11-02 확인
+| 도구 | 라이선스 | 이 서비스에서 |
+| --- | --- | --- |
+| MiniMax H3 (AI 영상) | MiniMax H3 Community License — 대한민국·미국·영국·EU 제외 | 기본으로 생성을 막음. 별도 라이선스가 있으면 `.env`에 `H3_LICENSE_GRANTED=1`, 제외 지역 밖 PC는 `H3_LICENSE_REGION=JP` 처럼 지정 |
+| edge-tts (내레이션) | 코드 GPL-3.0, 음성은 MS Edge 읽기 서비스 | 상업 이용 허락이 불명확. 공모전·유료 게시물은 MIT인 MeloTTS 등으로 교체 권장 |
+| Stable Audio 3 (AI 음악) | Stability AI Community License | 연매출 100만 달러 미만 무료, 상업 이용 시 등록 필요. MIT인 ACE-Step 1.5로 대체 가능 |
+| Gemini API 무료 등급 | Gemini API 약관 | 입력·출력이 구글 학습과 사람 검토에 쓰임. 미공개 작품은 유료 등급 권장 |
+| HyperFrames, YuNet / Google Fonts | Apache 2.0 / OFL | 제한 없음 |
+
+Wan2GP 안의 대체 모델: Wan 2.2 I2V·Wan 2.1 FLF2V·VACE, Qwen-Image-Edit 2511은 Apache 2.0, ACE-Step 1.5는 MIT. Hunyuan 계열은 대한민국이 제외 지역이라 쓰지 않습니다.
 
 ## 실행
 **자동 설치(Windows 10/11)**: `setup.bat`을 더블클릭합니다. Python 3.11+, Node.js 22+, FFmpeg, Git이 없으면 winget으로 설치하고, 패키지·글꼴·렌더링 엔진을 받고, Gemini API 키를 물은 뒤 바탕화면 바로가기를 만듭니다. 이미 있는 것은 건너뛰므로 여러 번 실행해도 됩니다. NVIDIA GPU가 있으면 AI 영상 생성 도구(약 80GB)도 설치할지 묻습니다(`setup.bat -H3`는 묻지 않고 설치).

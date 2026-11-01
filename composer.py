@@ -397,6 +397,20 @@ STYLE_PCSS = {
 
 
 # ---------------------------------------------------------------- 자막·로고
+DISC_CSS = '''<style>
+      .disc { position: absolute; left: 0; right: 0; top: 34px; text-align: center; z-index: 59; pointer-events: none; }
+      .disc span { display: inline-block; max-width: 86%; padding: 8px 20px; border-radius: 8px; background: rgba(0,0,0,.55); color: #fff;
+                   font-family: var(--font-body); font-weight: 500; font-size: 28px; line-height: 1.35; word-break: keep-all; }
+    </style>'''
+DISC_MAX = 60  # 공모전 AI 고지 문구 같은 고정 안내문 최대 글자 수
+
+
+def disclaimer_text(p):
+    """plan의 고정 안내문(예: '본 영상은 생성형 AI를 활용하여 제작되었습니다.'). 없으면 ''."""
+    t = p.get('disclaimer')
+    return ' '.join(t.split())[:DISC_MAX] if isinstance(t, str) else ''
+
+
 CAPTION_CSS = '''<style>
       .cap { position: absolute; left: 0; right: 0; bottom: 34px; text-align: center; z-index: 58; pointer-events: none; }
       .cap span { display: inline-block; max-width: 80%; padding: 10px 24px; border-radius: 10px; background: rgba(0,0,0,.62); color: #fff;
@@ -619,7 +633,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     css = '\n    '.join([re.search(r'<style>.*?</style>', base, re.S).group(0), COMMON_CSS, SCENE_CSS, VARIANT_CSS, STYLE_CSS[style]]
                        + ([PORTRAIT_CSS, PORTRAIT_SCENE_CSS, PORTRAIT_VARIANT_CSS, STYLE_PCSS.get(style, '')] if portrait else [])
                        + [font_css(job_dir, style, p, captions)]
-                       + [CAPTION_CSS, CAPTION_PCSS if portrait else ''] * bool(captions) + [LOGO_CSS, LOGO_PCSS if portrait else ''] * bool(logo))
+                       + [CAPTION_CSS, CAPTION_PCSS if portrait else ''] * bool(captions) + [LOGO_CSS, LOGO_PCSS if portrait else ''] * bool(logo) + [DISC_CSS] * bool(disclaimer_text(p)))
     M = Media(job_dir, photos, blur, portrait)
     tl_ = max(1, len(p['title']))
     big_fs = min(190, int(940 / tl_)) if portrait else (230 if tl_ <= 8 else 170)
@@ -640,6 +654,9 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     caps = ''.join(f'\n      <div class="cap clip" id="cap{i}" data-start="{a}" data-duration="{d}" data-track-index="{40 + i}"><span>{e(t)}</span></div>'
                    for i, (a, d, t) in enumerate(captions or []) if t.strip())
     o = p['outro']
+    disc = disclaimer_text(p)   # 엔딩 내내 화면 위쪽에 고정 표시(자막과 겹치지 않게)
+    disc = (f'\n      <div class="disc clip" id="disc" data-start="{os_}" data-duration="{round(total - os_, 2)}" data-track-index="39">'
+            f'<span>{e(disc)}</span></div>') if disc else ''
     body = f'''
       <div id="intro" class="scene clip" data-start="0" data-duration="{round(starts[0] + 0.8, 2)}" data-track-index="0">
         {M.tag(p['intro_photo'], 'photo', 0, round(starts[0] + 0.8, 2), full)}{ilogo}
@@ -661,7 +678,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
       <div class="panel" id="p_b" style="background:var(--sun)"></div>
       <div class="panel" id="p_c" style="background:var(--mint)"></div>
       <div id="flash"></div><div class="lb top"></div><div class="lb bot"></div>
-      <div id="progress"></div>{caps}{audio_html}'''
+      <div id="progress"></div>{caps}{disc}{audio_html}'''
     glob = p.get('transition') or 'mix'
     mix = st['mix']
     pick = lambda i, v: v if v in TRANSITIONS else glob if glob in TRANSITIONS else mix[(i + seed) % len(mix)]
