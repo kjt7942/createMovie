@@ -1063,6 +1063,11 @@ def setup_page():
     return app.send_static_file('setup.html')
 
 
+@app.get('/guide')
+def guide_page():
+    return app.send_static_file('guide.html')
+
+
 @app.get('/api/setup/status')
 def setup_state():
     return jsonify(dict(setup_status(), local=h3_routes.is_local(), windows=os.name == 'nt'))

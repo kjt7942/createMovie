@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>사용법 · createMovie</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+.top-in .acts { margin-left:auto; display:flex; gap:8px; }
+.top-in .acts a { display:inline-flex; align-items:center; height:34px; padding:0 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--ink); font-size:13px; font-weight:600; text-decoration:none; }
+#pdf { display:block; width:100%; height:calc(100vh - var(--nav-h, 47px) - 62px); min-height:480px; border:0; }
+</style>
+</head>
+<body class="ui">
+<script src="/nav.js"></script>
+<header class="top"><div class="top-in"><div class="brand">사용법</div>
+  <div class="acts"><a href="/manual.pdf" target="_blank" rel="noopener">새 탭에서 열기</a><a href="/manual.pdf" download="createMovie-사용설명서.pdf">PDF 내려받기</a></div>
+</div></header>
+<iframe id="pdf" src="/manual.pdf" title="createMovie 사용 설명서"></iframe>
+</body>
+</html>
