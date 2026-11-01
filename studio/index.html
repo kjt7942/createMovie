@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H3 Studio</title>
+<style>
+:root { --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --muted:#667085; --line:#dfe3ea; --accent:#3257d6; --ok:#12805c; --warn:#a15c00; --bad:#c62f2f; --soft:#eef1f6; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14171d; --card:#1d212a; --ink:#e7eaf0; --muted:#98a2b3; --line:#323844; --accent:#7f9cff; --ok:#4cc79c; --warn:#e6a94f; --bad:#f07878; --soft:#272c37; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 "Malgun Gothic","Segoe UI",system-ui,sans-serif; }
+header { display:flex; align-items:center; gap:16px; padding:14px 20px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+header h1 { font-size:18px; margin:0; }
+.gpuhead { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; font-size:14px; }
+.layout { display:grid; grid-template-columns:230px minmax(0,1fr); gap:16px; padding:16px 20px; max-width:1400px; margin:auto; }
+@media (max-width:820px) { .layout { grid-template-columns:minmax(0,1fr); padding:12px; } }
+.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
+h2 { font-size:16px; margin:0 0 12px; }
+h3 { font-size:14px; margin:14px 0 6px; }
+label { display:block; font-size:13px; color:var(--muted); margin-bottom:10px; }
+input,select,textarea { display:block; width:100%; margin-top:3px; padding:8px; font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:6px; }
+input[type=checkbox] { display:inline; width:auto; margin:0 6px 0 0; }
+textarea { min-height:90px; resize:vertical; }
+textarea.code { font-family:Consolas,monospace; font-size:13px; min-height:190px; }
+button { font:inherit; padding:8px 14px; border-radius:6px; border:1px solid var(--line); background:var(--soft); color:var(--ink); cursor:pointer; }
+button:hover:not(:disabled) { border-color:var(--accent); }
+button:disabled { opacity:.5; cursor:default; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+@media (prefers-color-scheme: dark) { button.primary { color:#10131a; } }
+button.danger { color:var(--bad); }
+.row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+.row > label { flex:1 1 150px; }
+.projects button { display:block; width:100%; text-align:left; margin-bottom:6px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.projects button.on { border-color:var(--accent); }
+.projects small { display:block; color:var(--muted); }
+.msg { padding:9px 12px; border-radius:6px; margin:10px 0; background:var(--soft); overflow-wrap:anywhere; }
+.msg.bad { color:var(--bad); } .msg.warn { color:var(--warn); } .msg.ok { color:var(--ok); }
+.bar { height:10px; background:var(--soft); border-radius:5px; overflow:hidden; margin:6px 0; }
+.bar > div { height:100%; background:var(--accent); width:0; transition:width .4s; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin:10px 0; }
+.stat { background:var(--soft); border-radius:6px; padding:8px 10px; font-variant-numeric:tabular-nums; }
+.stat b { display:block; font-size:18px; } .stat span { color:var(--muted); font-size:12px; }
+.stat.hot b { color:var(--bad); }
+svg.chart { width:100%; height:90px; display:block; background:var(--soft); border-radius:6px; }
+.scenes { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+.scene { border:1px solid var(--line); border-radius:8px; padding:12px; min-width:0; }
+.scene.active { border-color:var(--accent); }
+.scene h3 { margin:0 0 6px; display:flex; gap:8px; justify-content:space-between; }
+.tag { font-size:12px; font-weight:400; color:var(--muted); }
+.tag.done { color:var(--ok); } .tag.active { color:var(--accent); }
+video,img.frame { width:100%; max-height:360px; border-radius:6px; background:#000; display:block; object-fit:contain; }
+.final video { max-height:560px; }
+pre.log { max-height:220px; overflow:auto; background:var(--soft); padding:10px; border-radius:6px; font:12px/1.45 Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; margin:0; }
+.checks div { padding:2px 0; font-size:14px; overflow-wrap:anywhere; }
+.muted { color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
+ol.steps { padding-left:20px; margin:0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>H3 Studio</h1>
+  <div class="gpuhead" id="gpuhead">GPU 확인 중</div>
+</header>
+<div class="layout">
+  <aside>
+    <div class="card" id="queue" hidden></div>
+    <div class="card">
+      <button class="primary" id="newBtn" style="width:100%;margin-bottom:12px">새 영상 만들기</button>
+      <h2>프로젝트</h2>
+      <div class="projects" id="projects"></div>
+    </div>
+  </aside>
+  <main>
+    <div id="live" class="card" hidden></div>
+    <section id="create">
+      <div class="card">
+        <h2>1. 조건 입력</h2>
+        <label>소재나 줄거리<textarea id="topic" placeholder="예: 작은 병아리가 반짝이는 알을 발견하고, 알이 무지개빛으로 변하다 깨지면서 아기 병아리들이 나온다"></textarea></label>
+        <div class="row">
+          <label>시청층<input id="audience" value="유아, 초등 저학년"></label>
+          <label>그림체<input id="style" value="Polished 3D animated family film, soft lighting, vivid cheerful colors"></label>
+        </div>
+        <div class="row">
+          <label>해상도<select id="size"></select></label>
+          <label>장면 수<input id="sceneCount" type="number" min="1" max="12" value="4"></label>
+          <label>전체 길이(초)<input id="seconds" type="number" min="4" max="90" value="20"></label>
+        </div>
+        <label style="color:var(--ink)"><input type="checkbox" id="loop" checked>마지막을 첫 장면으로 연결(반복 재생용)</label>
+        <div class="row">
+          <button id="promptBtn" class="primary">안내문 만들기</button>
+          <button id="defaultsBtn" title="소재와 붙여 넣은 스크립트도 함께 지워집니다">전체 기본값으로</button>
+        </div>
+        <div id="promptErr"></div>
+      </div>
+      <div class="card" id="promptCard" hidden>
+        <h2>2. 무료 LLM에 붙여넣기</h2>
+        <p class="muted">아래 안내문을 복사해 무료 LLM에 넣고, 답변을 3번 칸에 붙여 넣으세요.</p>
+        <textarea id="promptOut" class="code" readonly></textarea>
+        <button id="copyBtn" style="margin-top:8px">복사</button>
+      </div>
+      <div class="card">
+        <h2>3. LLM 답변 붙여넣기</h2>
+        <textarea id="scriptIn" class="code" placeholder="{ &quot;title&quot;: ..., &quot;scenes&quot;: [...] }"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button id="checkBtn">검사</button>
+          <button id="queueBtn" class="primary" disabled>대기열에 추가</button>
+          <button id="createBtn" disabled>프로젝트만 만들기</button>
+        </div>
+        <div id="checkOut"></div>
+      </div>
+    </section>
+    <section id="detail" hidden></section>
+  </main>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+function el(tag, props = {}, ...kids) {  // All text goes through textContent, because scripts come from an LLM.
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v; else if (k === 'on') for (const [ev, fn] of Object.entries(v)) e.addEventListener(ev, fn);
+    else if (k in e) e[k] = v; else e.setAttribute(k, v);
+  }
+  for (const kid of kids) if (kid !== null && kid !== undefined) e.append(kid);
+  return e;
+}
+const fill = (box, ...kids) => box.replaceChildren(...kids.filter(k => k !== null && k !== undefined));  // replaceChildren prints null as text.
+async function api(path, data) {
+  const opts = data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) };
+  let res;
+  try { res = await fetch(path, opts); } catch { throw new Error('Studio 서버에 연결할 수 없습니다. 창이 꺼졌는지 확인하세요.'); }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `서버 오류 (${res.status})`);
+  return json;
+}
+const fmtTime = s => { if (s == null || !isFinite(s)) return '-'; s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m ? `${m}분 ${s % 60}초` : `${s}초`; };
+const STATUS = { ready:'준비됨', queued:'대기 중', preflight:'점검 중', running:'생성 중', done:'완료', failed:'실패', stopped:'멈춤', interrupted:'중단됨' };
+const PHASE = { preflight:'시작 전 점검', cooling:'GPU 식히는 중', rendering:'장면 생성', music:'배경음악 생성', joining:'영상 합치기', done:'완료', failed:'실패', stopped:'멈춤' };
+const STAGE = { 'Denoising':'이미지 생성(디노이징)', 'VAE Decoding':'영상 디코딩', 'Encoding Text Prompt':'프롬프트 분석' };
+const stageName = s => STAGE[s] || (s.startsWith('Loading') ? '모델 불러오기' : s.startsWith('Saving') ? '파일 저장' : s.startsWith('Decoding') ? '소리 디코딩' : s);
+let options = {}, current = null, currentView = null, status = {}, lastCheck = '', renderedKey = '';
+
+function message(box, text, kind = '') { box.replaceChildren(el('div', { class: `msg ${kind}`, textContent: text })); }
+
+async function refreshProjects() {
+  const { projects } = await api('/api/projects');
+  $('projects').replaceChildren(...(projects.length ? projects.map(p => el('button', { class: p.id === current ? 'on' : '', title: p.title, on: { click: () => openProject(p.id) } },
+    p.title, el('small', { textContent: STATUS[p.status] || p.status }))) : [el('div', { class: 'muted', textContent: '아직 없습니다' })]));
+}
+const SETTINGS = ['audience', 'style', 'size', 'sceneCount', 'seconds'], SETTINGS_KEY = 'h3-create-settings';
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...Object.fromEntries(SETTINGS.map(id => [id, $(id).value])), loop: $('loop').checked })); } catch {}
+}
+function loadSettings() {  // Runs after the size options exist. Blocked or damaged storage just leaves the defaults.
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY)); } catch {}
+  if (!saved) return;
+  for (const id of SETTINGS) if (typeof saved[id] === 'string') $(id).value = saved[id];
+  if ($('size').selectedIndex < 0) $('size').selectedIndex = 0;  // The saved preset no longer exists.
+  if (typeof saved.loop === 'boolean') $('loop').checked = saved.loop;
+}
+function resetDefaults() {
+  for (const id of SETTINGS) if (id !== 'size') $(id).value = $(id).defaultValue;
+  $('size').selectedIndex = 0;
+  $('loop').checked = $('loop').defaultChecked;
+  try { localStorage.removeItem(SETTINGS_KEY); } catch {}
+  resetCreate();
+}
+function resetCreate() {
+  for (const id of ['topic', 'promptOut', 'scriptIn']) $(id).value = '';
+  $('promptCard').hidden = true;
+  $('createBtn').disabled = $('queueBtn').disabled = true;
+  $('promptErr').replaceChildren(); $('checkOut').replaceChildren();
+}
+function showCreate() { resetCreate(); current = null; currentView = null; renderedKey = ''; $('create').hidden = false; $('detail').hidden = true; refreshProjects(); window.scrollTo(0, 0); }
+async function openProject(id) { current = id; renderedKey = ''; $('create').hidden = true; $('detail').hidden = false; await loadDetail(); refreshProjects(); }
+
+async function loadDetail() {
+  if (!current) return;
+  currentView = await api(`/api/projects/${current}`);
+  renderDetail();
+}
+function renderDetail() {
+  const p = currentView, mine = status.project === p.id && status.busy;
+  // Rebuild only when something changed, so a playing video or a half-typed edit is not wiped by polling.
+  const key = JSON.stringify([p.status, p.message, mine, p.version, p.scenes.map(s => [s.done, s.stamp, s.action, s.sound, s.frames]), p.final_stamp, p.loop, p.warnings]);
+  if (key === renderedKey) return;
+  renderedKey = key;
+  const kind = { failed: 'bad', interrupted: 'warn', stopped: 'warn', done: 'ok' }[p.status] || '';
+  const done = p.scenes.filter(s => s.done).length;
+  const resume = done > 0 && p.status !== 'done';
+  const box = $('detail');
+  fill(box,
+    el('div', { class: 'card' },
+      el('h2', { textContent: p.script.title }),
+      el('div', { class: 'muted', textContent: `${p.size} · 장면 ${p.scenes.length}개 · ${p.total_seconds.toFixed(1)}초 · 예상 약 ${fmtTime(p.scenes.reduce((a, s) => a + s.estimate, 0))} · 저장 위치 ${p.folder}` }),
+      el('label', { style: 'color:var(--ink);margin:10px 0' }, el('input', { type: 'checkbox', checked: p.loop, disabled: mine, on: { change: async e => { await api(`/api/projects/${p.id}/settings`, { loop: e.target.checked }); await loadDetail(); } } }), '마지막을 첫 장면으로 연결'),
+      p.message ? el('div', { class: `msg ${kind}`, textContent: p.message }) : null,
+      ...(p.warnings || []).map(w => el('div', { class: 'msg warn', textContent: w })),
+      el('div', { class: 'row' },
+        mine ? el('button', { class: 'danger', textContent: '멈추기', on: { click: stopRun } })
+             : p.status === 'queued' ? el('button', { textContent: '대기열에서 빼기', on: { click: () => dequeue(p.id) } })
+             : el('button', { class: 'primary', textContent: p.status === 'done' ? '다시 합치기' : resume ? '이어서 생성' : '생성 시작', title: '다른 영상이 생성 중이면 대기열 끝에 들어갑니다', on: { click: () => startRun(p.id) } }),
+        el('button', { textContent: '점검만 실행', on: { click: runCheck } })),
+      el('div', { id: 'checkBox', class: 'checks' })),
+    p.has_final ? el('div', { class: 'card final' }, el('h2', { textContent: '최종 영상 검수' }),
+      el('video', { controls: true, loop: p.loop, preload: 'metadata', src: `/media/${p.id}/final.mp4?t=${p.final_stamp}` }),
+      el('div', { class: 'row', style: 'margin-top:8px' },
+        el('button', { class: 'primary', textContent: '폴더에서 보기', on: { click: () => api(`/api/projects/${p.id}/reveal`, {}).catch(e => message($('checkBox'), e.message, 'bad')) } })),
+      el('div', { class: 'muted', style: 'margin-top:6px', textContent: p.final_path })) : null,
+    el('div', { class: 'card' }, el('h2', { textContent: '장면' }),
+      el('div', { class: 'scenes' }, ...p.scenes.map(s => sceneCard(p, s, mine)))),
+    p.versions.length ? el('div', { class: 'muted', textContent: `이전 버전 보관: ${p.folder}\\versions (${p.versions.join(', ')})` }) : null,
+  );
+}
+function sceneCard(p, s, busy) {
+  const active = status.busy && status.project === p.id && status.live && status.live.scene === s.index;
+  const action = el('textarea', { value: s.action, disabled: busy });
+  const sound = el('textarea', { value: s.sound, disabled: busy, style: 'min-height:60px' });
+  const seconds = el('input', { type: 'number', step: '0.1', value: s.seconds.toFixed(1), disabled: busy });
+  const err = el('div');
+  const save = async new_seed => {
+    try {
+      await api(`/api/projects/${p.id}/scene/${s.index}`, { action: action.value, sound: sound.value, seconds: Number(seconds.value), new_seed });
+      await loadDetail();
+    } catch (e) { message(err, e.message, 'bad'); }
+  };
+  return el('div', { class: `scene${active ? ' active' : ''}` },
+    el('h3', {}, `장면 ${s.index}`, el('span', { class: `tag ${s.done ? 'done' : active ? 'active' : ''}`, textContent: s.done ? `완료 · ${fmtTime(s.render_seconds)}` : active ? '생성 중' : `${s.seconds.toFixed(1)}초 · 대기` })),
+    s.done ? el('video', { controls: true, preload: 'metadata', src: `/media/${p.id}/scene/${s.index}.mp4?t=${s.stamp}` }) : null,
+    el('label', { style: 'margin-top:8px' }, '동작', action), el('label', {}, '효과음', sound), el('label', {}, '길이(초)', seconds), err,
+    el('div', { class: 'row' },
+      el('button', { textContent: '수정 저장', disabled: busy, on: { click: () => save(false) } }),
+      el('button', { textContent: '다른 결과로', title: '내용은 그대로 두고 시드를 바꿉니다', disabled: busy, on: { click: () => save(true) } })));
+}
+async function startRun(id) {
+  try { await api(`/api/projects/${id}/start`, {}); renderedKey = ''; await poll(); }
+  catch (e) { message($('checkBox'), e.message, 'bad'); }
+}
+async function stopRun() { await api('/api/stop', {}); await poll(); }
+async function dequeue(id) { await api(`/api/projects/${id}/dequeue`, {}); renderedKey = ''; await poll(); await refreshProjects(); }
+let queueKey = '';
+function renderQueue() {
+  const q = status.queue || [], key = JSON.stringify([q, status.paused, status.pause_reason]);
+  if (key === queueKey) return;
+  queueKey = key;
+  refreshProjects();
+  const box = $('queue');
+  box.hidden = !q.length;
+  fill(box,
+    el('h2', { textContent: `대기열 ${q.length}개 · 약 ${fmtTime(q.reduce((a, x) => a + x.estimate, 0))}` }),
+    status.paused ? el('div', { class: 'msg warn', textContent: status.pause_reason }) : null,
+    status.paused ? el('button', { class: 'primary', textContent: '재개', style: 'width:100%;margin-bottom:8px', on: { click: async () => { await api('/api/queue/resume', {}); await poll(); } } }) : null,
+    ...q.map((x, i) => el('div', { class: 'row', style: 'align-items:center;margin-bottom:6px;flex-wrap:nowrap' },
+      el('a', { href: '#', style: 'flex:1;min-width:0;overflow-wrap:anywhere', textContent: `${i + 1}. ${x.title}`, on: { click: e => { e.preventDefault(); openProject(x.id); } } }),
+      el('button', { textContent: '빼기', on: { click: () => dequeue(x.id).catch(() => {}) } }))));
+}
+async function runCheck() {
+  const box = $('checkBox'); message(box, '점검 중입니다. 30초 정도 걸릴 수 있습니다.');
+  try {
+    const { checks } = await api('/api/preflight');
+    showChecks(box, checks);
+  } catch (e) { message(box, e.message, 'bad'); }
+}
+function showChecks(box, checks) {
+  box.replaceChildren(...checks.map(c => el('div', { style: `color:var(--${c.ok ? 'ok' : c.fatal ? 'bad' : 'warn'})`, textContent: `${c.ok ? '통과' : c.fatal ? '실패' : '주의'} · ${c.name}${c.detail ? ` · ${c.detail}` : ''}` })));
+}
+function chart(samples, key, max, line) {
+  const W = 600, H = 90, now = Date.now() / 1000, span = 360;
+  const pts = samples.filter(s => s[key] != null).map(s => `${(W - (now - s.t) / span * W).toFixed(1)},${(H - s[key] / max * H).toFixed(1)}`).join(' ');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('class', 'chart');
+  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', '최근 6분 GPU 온도 그래프');
+  const add = (tag, attrs) => { const n = document.createElementNS(svg.namespaceURI, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); n.setAttribute('vector-effect', 'non-scaling-stroke'); svg.append(n); };
+  if (line) add('line', { x1: 0, x2: W, y1: H - line / max * H, y2: H - line / max * H, stroke: 'var(--bad)', 'stroke-dasharray': '5 4' });
+  add('polyline', { points: pts, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2 });
+  return svg;
+}
+function renderLive() {
+  const s = status, g = (s.gpu || []).at(-1);
+  $('gpuhead').textContent = g ? `GPU ${g.temp ?? '-'}°C · ${g.power == null ? '-' : Math.round(g.power)}W / ${g.limit == null ? '-' : Math.round(g.limit)}W · ${g.mem == null ? '-' : (g.mem / 1024).toFixed(1)}GB · 팬 ${g.fan ?? '-'}%` : 'GPU 응답 없음';
+  const box = $('live');
+  if (!s.busy) { box.hidden = true; return; }
+  box.hidden = false;
+  const l = s.live, frac = Math.min(1, l.fraction || 0);
+  const remaining = l.eta != null && l.eta_at ? Math.max(0, l.eta - (Date.now() / 1000 - l.eta_at)) : null;
+  const hot = g && g.temp >= 88;
+  fill(box,
+    el('h2', { textContent: `${PHASE[l.phase] || l.phase}${l.scene ? ` · 장면 ${l.scene}` : ''}` }),
+    el('div', { textContent: `${stageName(l.stage || '')} ${l.fraction ? `${Math.round(frac * 100)}%` : ''}` }),
+    el('div', { class: 'bar' }, el('div', { style: `width:${frac * 100}%` })),
+    el('div', { class: 'muted', textContent: `경과 ${fmtTime(Date.now() / 1000 - l.started)} · 남은 시간 약 ${fmtTime(remaining)}${status.project !== current ? ` · 다른 프로젝트 생성 중` : ''}` }),
+    el('div', { class: 'stats' },
+      el('div', { class: `stat${hot ? ' hot' : ''}` }, el('b', { textContent: g ? `${g.temp}°C` : '-' }), el('span', { textContent: `온도 (${options.stop_temp}°C에 중단)` })),
+      el('div', { class: 'stat' }, el('b', { textContent: g && g.power != null ? `${Math.round(g.power)}W` : '-' }), el('span', { textContent: '전력' })),
+      el('div', { class: 'stat' }, el('b', { textContent: g && g.mem != null ? `${(g.mem / 1024).toFixed(1)}GB` : '-' }), el('span', { textContent: 'VRAM' })),
+      el('div', { class: 'stat' }, el('b', { textContent: g && g.fan != null ? `${g.fan}%` : '-' }), el('span', { textContent: '팬' }))),
+    chart(s.gpu || [], 'temp', 100, options.stop_temp),
+    l.checks && l.checks.length && l.phase === 'preflight' ? (() => { const c = el('div', { class: 'checks' }); showChecks(c, l.checks); return c; })() : null,
+    el('h3', { textContent: '로그' }),
+    (() => { const pre = el('pre', { class: 'log', textContent: (s.log || []).join('\n') }); setTimeout(() => pre.scrollTop = pre.scrollHeight); return pre; })());
+}
+let polling = false, wasBusy = false, lastShown = '';
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try {
+    status = await api('/api/status');
+    renderLive();
+    renderQueue();
+    if (current) await loadDetail();
+    const shown = currentView ? currentView.status : '';
+    if (wasBusy !== status.busy || lastShown !== shown) refreshProjects();
+    wasBusy = status.busy; lastShown = shown;
+  } catch (e) {
+    $('gpuhead').textContent = e.message;
+  } finally { polling = false; }
+}
+
+$('newBtn').onclick = showCreate;
+$('defaultsBtn').onclick = resetDefaults;
+for (const id of [...SETTINGS, 'loop']) $(id).addEventListener('change', saveSettings);
+$('promptBtn').onclick = async () => {
+  try {
+    const { prompt } = await api('/api/llm_prompt', { topic: $('topic').value, audience: $('audience').value, style: $('style').value, scenes: $('sceneCount').value, seconds: $('seconds').value, size: $('size').value, loop: $('loop').checked });
+    $('promptOut').value = prompt; $('promptCard').hidden = false; $('promptErr').replaceChildren();
+    $('promptCard').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { message($('promptErr'), e.message, 'bad'); }
+};
+$('copyBtn').onclick = async () => {
+  try { await navigator.clipboard.writeText($('promptOut').value); $('copyBtn').textContent = '복사됨'; }
+  catch { $('promptOut').select(); $('copyBtn').textContent = 'Ctrl+C로 복사하세요'; }
+  setTimeout(() => $('copyBtn').textContent = '복사', 2000);
+};
+$('scriptIn').oninput = () => { $('createBtn').disabled = $('queueBtn').disabled = true; };
+$('checkBtn').onclick = async () => {
+  try {
+    const r = await api('/api/validate', { text: $('scriptIn').value, size: $('size').value });
+    const out = [...r.errors.map(e => el('div', { class: 'msg bad', textContent: e })), ...r.warnings.map(w => el('div', { class: 'msg warn', textContent: w }))];
+    if (!r.errors.length) {
+      const total = r.script.scenes.reduce((a, s) => a + s.seconds, 0);
+      out.unshift(el('div', { class: 'msg ok', textContent: `통과: "${r.script.title}", 장면 ${r.script.scenes.length}개, 약 ${total.toFixed(1)}초` }));
+    }
+    $('checkOut').replaceChildren(...out);
+    $('createBtn').disabled = $('queueBtn').disabled = r.errors.length > 0;
+  } catch (e) { message($('checkOut'), e.message, 'bad'); }
+};
+$('createBtn').onclick = async () => {
+  try {
+    const { id } = await api('/api/projects', { text: $('scriptIn').value, size: $('size').value, loop: $('loop').checked });
+    $('scriptIn').value = ''; $('createBtn').disabled = $('queueBtn').disabled = true; $('checkOut').replaceChildren();
+    await openProject(id);
+  } catch (e) { message($('checkOut'), e.message, 'bad'); }
+};
+$('queueBtn').onclick = async () => {  // Stays on this page, so the next script can be pasted right away.
+  try {
+    await api('/api/projects', { text: $('scriptIn').value, size: $('size').value, loop: $('loop').checked, queue: true });
+    $('scriptIn').value = ''; $('createBtn').disabled = $('queueBtn').disabled = true;
+    message($('checkOut'), '대기열에 추가했습니다. 다음 스크립트를 붙여 넣으세요.', 'ok');
+    $('promptCard').hidden = true;
+    await poll(); await refreshProjects();
+  } catch (e) { message($('checkOut'), e.message, 'bad'); }
+};
+(async () => {
+  try {
+    options = await api('/api/options');
+    $('size').replaceChildren(...Object.entries(options.presets).map(([v, p]) => el('option', { value: v, textContent: `${p.label}, 장면당 최대 ${p.max_seconds}초` })));
+    loadSettings();
+    await refreshProjects();
+    await poll();
+    if (status.busy && status.project) await openProject(status.project);
+  } catch (e) { $('gpuhead').textContent = e.message; }
+  setInterval(poll, 2000);
+})();
+</script>
+</body>
+</html>
