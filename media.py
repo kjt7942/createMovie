@@ -3,7 +3,7 @@
 - 동영상 클립: 길이, 포스터(첫 장면)·끝 장면 이미지.
 - 로고: 흰 배경 자동 제거, 여백 자르기.
 OpenCV나 모델이 없으면 얼굴 기능만 조용히 빠진다(나머지는 그대로 동작)."""
-import json, os, subprocess
+import json, os, subprocess, uuid
 from PIL import Image, ImageFilter, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -62,7 +62,9 @@ def blurred(src, dst, boxes):
         cx, cy, rw, rh = (x + w / 2) * W, (y + h / 2) * H, w * W * 0.8, h * H * 0.95
         d.ellipse([cx - rw, cy - rh, cx + rw, cy + rh], fill=255)
     mask = mask.filter(ImageFilter.GaussianBlur(max(2, W // 400)))
-    Image.composite(strong, im, mask).save(dst, quality=88)
+    part = dst + '.part'  # 있으면 재사용하는 캐시라, 쓰다 꺼진 파일이 남으면 안 된다
+    Image.composite(strong, im, mask).save(part, format='JPEG', quality=88)
+    os.replace(part, dst)
 
 
 def object_pos(fx, fy, img_aspect, box_aspect):
@@ -99,6 +101,72 @@ def frame(path, t, dst, max_side=1920):
     """동영상의 t초 장면을 JPG로(포스터·썸네일용, 가벼운 작업)."""
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{max(0, t):.2f}', '-i', path, '-frames:v', '1',
                     '-vf', f"scale='min({max_side},iw)':-2", '-q:v', '3', dst], check=True, timeout=120)
+
+
+def blurred_video(src, dst, every=4):
+    """동영상 속 얼굴을 흐린 사본을 만든다. 몇 프레임마다 감지하고, 움직여도 벗어나지 않게 앞뒤 감지 결과까지 합쳐 가린다.
+    놓치는 것이 더 위험하므로 감지 기준을 낮춘다(실제 영상의 옆모습이 0.5에서는 빠졌다). 얼굴이 아닌 곳이 조금 흐려질 수 있다.
+    영상 클립은 소리 없이 쓰이므로 소리는 뺀다. 실패하면 예외를 낸다: 얼굴이 그대로 나가면 안 된다.
+    ponytail: 감지에 잡히지 않은 얼굴(옆모습, 아주 작은 얼굴)은 가리지 못한다. 완벽해야 하면 사람이 완성본을 확인해야 한다."""
+    det = _detector()
+    if not det:
+        raise RuntimeError('얼굴 인식 모델이 없어 모자이크할 수 없습니다. python tools/get_fonts.py를 실행해 주세요.')
+    import cv2, numpy as np
+    found, cap, n, W, H = {}, cv2.VideoCapture(src), 0, 0, 0
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    det.setScoreThreshold(0.3)
+    while True:
+        if n % every:
+            if not cap.grab():
+                break
+        else:
+            ok, f = cap.read()
+            if not ok:
+                break
+            H, W = f.shape[:2]
+            det.setInputSize((W, H))
+            _, r = det.detect(f)
+            found[n] = [] if r is None else [tuple(float(v) for v in x[:4]) for x in r]
+        n += 1
+    cap.release()
+    det.setScoreThreshold(0.5)  # 사진 감지·초점 계산과 함께 쓰는 감지기다
+    if not n:
+        raise RuntimeError('동영상을 읽지 못해 모자이크할 수 없습니다.')
+    part = f'{dst}.{uuid.uuid4().hex}.mp4'
+    enc = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'bgr24', '-s', f'{W}x{H}', '-r', f'{fps:.4f}', '-i', '-',
+                            '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-an', '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p', part],
+                           stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    sigma = max(8, W // 80)
+    try:
+        cap, i = cv2.VideoCapture(src), 0
+        while True:
+            ok, f = cap.read()
+            if not ok:
+                break
+            k = i - i % every
+            for x, y, w, h in found.get(k - every, []) + found.get(k, []) + found.get(k + every, []):
+                cx, cy, rw, rh = x + w / 2, y + h / 2, w * 0.8, h * 0.95
+                x0, y0, x1, y1 = max(0, int(cx - rw)), max(0, int(cy - rh)), min(W, int(cx + rw) + 1), min(H, int(cy + rh) + 1)
+                if x1 <= x0 or y1 <= y0:
+                    continue
+                roi = f[y0:y1, x0:x1]
+                mask = np.zeros(roi.shape[:2], np.uint8)
+                cv2.ellipse(mask, (int(cx - x0), int(cy - y0)), (int(rw), int(rh)), 0, 0, 360, 255, -1)
+                f[y0:y1, x0:x1] = np.where(mask[..., None] > 0, cv2.GaussianBlur(roi, (0, 0), sigma), roi)
+            enc.stdin.write(f.tobytes())
+            i += 1
+        cap.release()
+        enc.stdin.close()
+        if enc.wait(timeout=600) != 0 or not i:
+            raise RuntimeError('동영상 모자이크 파일을 만들지 못했습니다. FFmpeg 설치를 확인해 주세요.')
+        os.replace(part, dst)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        enc.kill()
+        raise RuntimeError('동영상 모자이크 파일을 만들지 못했습니다: %s' % e)
+    finally:
+        if os.path.exists(part):
+            enc.wait()
+            os.remove(part)
 
 
 # ---------------------------------------------------------------- 로고

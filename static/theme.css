@@ -1,0 +1,101 @@
+/* 모든 화면이 함께 쓰는 디자인. 색·글꼴·버튼·입력칸·카드·메시지·상단 막대를 여기서만 정한다.
+   .ui를 body에 달면 class 없는 button·input·textarea·select도 같은 모양이 된다. */
+@font-face { font-family:"Pretendard Variable"; src:url("/fonts/PretendardVariable.woff2") format("woff2"); font-weight:45 920; font-display:swap; }
+@font-face { font-family:"IBM Plex Mono"; src:url("/fonts/IBMPlexMono-Regular.ttf") format("truetype"); font-weight:400; font-display:swap; }
+@font-face { font-family:"IBM Plex Mono"; src:url("/fonts/IBMPlexMono-SemiBold.ttf") format("truetype"); font-weight:600; font-display:swap; }
+
+:root {
+  --bg:#ECEEF1; --surface:#FFFFFF; --surface-2:#F5F6F8; --ink:#15171C; --ink-2:#464C57; --mute:#7C828D;
+  --line:#DDE1E6; --line-2:#C2C7CF; --brand:#1F2B4D; --on-brand:#FFFFFF; --tally:#E5412F; --tally-soft:rgba(229,65,47,.10);
+  --ok:#1E8757; --ok-soft:rgba(30,135,87,.10); --warn:#A15C00; --warn-soft:rgba(161,92,0,.10);
+  --nav-bg:#1F2B4D; --nav-ink:#C9D0DE; --nav-on:rgba(255,255,255,.14); --nav-line:rgba(255,255,255,.22);
+  --shadow:0 1px 2px rgba(16,20,30,.05), 0 6px 24px rgba(16,20,30,.06);
+  --sans:"Pretendard Variable", Pretendard, "Malgun Gothic", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg:#101217; --surface:#181B21; --surface-2:#1F232A; --ink:#ECEEF2; --ink-2:#B7BCC6; --mute:#868C97;
+  --line:#2A2F37; --line-2:#3A404A; --brand:#E8EBF2; --on-brand:#121419; --tally:#FF5A47; --tally-soft:rgba(255,90,71,.14);
+  --ok:#3DBB82; --ok-soft:rgba(61,187,130,.14); --warn:#E6A94F; --warn-soft:rgba(230,169,79,.14);
+  --nav-bg:#181B21; --nav-ink:#B7BCC6; --nav-on:rgba(255,255,255,.10); --nav-line:#3A404A; --shadow:none;
+} }
+
+* { box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--sans); letter-spacing:-0.01em; }
+button, input, textarea, select { font:inherit; color:inherit; letter-spacing:inherit; }
+:focus-visible { outline:2px solid var(--tally); outline-offset:2px; }
+[hidden] { display:none !important; }
+.mono { font-family:var(--mono); letter-spacing:0; font-variant-numeric:tabular-nums; }
+
+/* 화면별 머리글과 본문 틀 */
+.top { position:sticky; top:var(--nav-h, 0px); z-index:20; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+.top-in { max-width:1240px; margin:0 auto; padding:0 24px; height:60px; display:flex; align-items:center; gap:28px; }
+.brand { font-weight:700; font-size:16px; white-space:nowrap; }
+.shell { max-width:1240px; margin:0 auto; padding:28px 24px 0; display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:24px; align-items:start; }
+
+/* 카드 */
+.panel, .ui .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:22px; }
+.ui .card { margin-bottom:16px; }
+.ui h2 { font-size:16px; font-weight:700; margin:0 0 14px; }
+
+/* 버튼 */
+.btn, .ui button { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:42px; padding:0 18px; border-radius:10px; border:1px solid var(--line-2);
+  background:var(--surface); cursor:pointer; font-weight:600; font-size:14px; text-decoration:none; color:var(--ink); transition:background .15s, border-color .15s; }
+.btn:hover, .ui button:hover:not(:disabled) { background:var(--surface-2); }
+.btn.primary, .ui button.primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); padding:0 22px; }
+.btn.primary:hover, .ui button.primary:hover:not(:disabled) { background:var(--brand); filter:brightness(1.12); }
+.btn.ghost { border-color:transparent; background:none; color:var(--ink-2); }
+.btn.ghost:hover { background:var(--surface-2); }
+.btn.danger, .ui button.danger { color:var(--tally); }
+.btn:disabled, .ui button:disabled { opacity:.45; cursor:not-allowed; filter:none; }
+.btn.sm { height:34px; padding:0 12px; font-size:13px; }
+
+/* 입력칸 */
+.input, textarea.input, .ui input:not([type=checkbox]), .ui select, .ui textarea { width:100%; height:42px; padding:0 12px; border:1px solid var(--line-2); border-radius:9px; background:var(--surface); transition:border-color .15s, box-shadow .15s; }
+textarea.input, .ui textarea { height:auto; min-height:128px; padding:11px 12px; resize:vertical; line-height:1.6; }
+.input:focus, .ui input:focus, .ui select:focus, .ui textarea:focus { outline:none; border-color:var(--ink-2); box-shadow:0 0 0 3px var(--surface-2); }
+.input[readonly], .ui textarea[readonly] { background:var(--surface-2); color:var(--mute); }
+.ui label { display:block; font-size:13px; font-weight:600; color:var(--ink-2); margin-bottom:12px; }
+.ui label > input, .ui label > select, .ui label > textarea { display:block; margin-top:6px; font-weight:400; color:var(--ink); }
+.ui label > input[type=checkbox] { display:inline; width:auto; margin:0 6px 0 0; }
+
+/* 메시지 */
+.alert { margin-top:14px; padding:12px 14px; border-radius:10px; background:var(--tally-soft); color:var(--tally); font-size:14px; white-space:pre-wrap; }
+.alert:empty { display:none; }
+.okmsg { padding:10px 14px; border-radius:10px; background:var(--ok-soft); color:var(--ok); font-size:14px; font-weight:600; }
+.okmsg.neutral { background:var(--surface-2); color:var(--ink-2); font-weight:500; }
+.okmsg:empty { display:none; }
+.msg { padding:10px 14px; border-radius:10px; margin:10px 0; background:var(--surface-2); color:var(--ink-2); font-size:14px; overflow-wrap:anywhere; }
+.msg.bad { background:var(--tally-soft); color:var(--tally); }
+.msg.warn { background:var(--warn-soft); color:var(--warn); }
+.msg.ok { background:var(--ok-soft); color:var(--ok); }
+.muted { color:var(--mute); font-size:13px; overflow-wrap:anywhere; }
+.ui a { color:var(--ink); }
+
+/* 공통 상단 막대 */
+#gnav { position:sticky; top:0; z-index:50; display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:7px max(24px, calc((100% - 1192px) / 2)); background:var(--nav-bg); color:var(--nav-ink); border-bottom:1px solid var(--nav-line); font-size:14px; }
+#gnav .logo { display:flex; align-items:center; gap:9px; margin-right:14px; color:#fff; font-weight:700; background:none; padding:0; }
+#gnav .logo:hover { background:none; }
+#gnav .logo i { width:9px; height:9px; border-radius:50%; background:#FF5A47; box-shadow:0 0 0 4px rgba(255,90,71,.22); }
+#gnav a { color:var(--nav-ink); text-decoration:none; padding:5px 10px; border-radius:8px; }
+#gnav a:hover { background:var(--nav-on); }
+#gnav a.on { color:#fff; background:var(--nav-on); font-weight:600; }
+#gg { margin-left:auto; padding:0 8px; font:13px var(--mono); letter-spacing:0; white-space:nowrap; }
+#gg.hot { color:#FFC56B; font-weight:600; }
+#gq { display:block; height:32px; color:#fff; background:var(--nav-on); border:1px solid var(--nav-line); border-radius:8px; padding:0 12px; font-size:13px; font-weight:600; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#gq.alarm { background:#A15C00; border-color:#C98A2E; }
+#gp { position:absolute; right:max(24px, calc((100% - 1192px) / 2)); top:100%; width:min(420px, calc(100vw - 32px)); max-height:70vh; overflow:auto; margin-top:6px; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:14px; box-shadow:0 8px 24px rgba(16,20,30,.25); }
+#gp .i { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--line); }
+#gp .i:first-child { border-top:0; }
+#gp .i span { flex:1; min-width:0; overflow-wrap:anywhere; }
+#gp a { color:var(--ink); padding:0; font-weight:600; }
+#gp a:hover { background:none; text-decoration:underline; }
+#gp small { display:block; color:var(--mute); }
+#gp button { flex:none; height:32px; padding:0 12px; font-size:13px; font-weight:600; color:var(--ink); background:var(--surface); border:1px solid var(--line-2); border-radius:8px; cursor:pointer; }
+#gp button:hover { background:var(--surface-2); }
+#gp button.mv { padding:0 9px; }
+#gp .alarm { color:var(--warn); margin-bottom:8px; overflow-wrap:anywhere; }
+#gp .bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin:4px 0; }
+#gp .bar div { height:100%; background:var(--tally); }
+@media (max-width:720px) { #gnav { position:relative; padding:7px 16px; } .top { top:0; } #gp { right:16px; } #gnav .logo { margin-right:6px; } .top-in { padding:0 16px; } #gg { order:5; margin-left:0; flex-basis:100%; padding:4px 0 0; } #gq { margin-left:auto; } }

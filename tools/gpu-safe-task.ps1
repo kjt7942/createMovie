@@ -1,14 +1,20 @@
 # Registers a startup task that reapplies the GPU limits after every boot, so gpu-safe.ps1 needs no UAC prompt.
 # Run once. The task calls nvidia-smi directly so that it does not depend on this drive being mounted at boot.
-# Keep these numbers in step with gpu-safe.ps1. Remove with: Unregister-ScheduledTask -TaskName H3-GPU-Safe
+# gpu-safe.ps1 rewrites this task's numbers whenever new limits are applied. Remove with: Unregister-ScheduledTask -TaskName H3-GPU-Safe
+param([int]$PowerLimit = 220, [int]$MaxClock = 1800)
+
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) {
-    $p = Start-Process powershell -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    $p = Start-Process powershell -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -PowerLimit $PowerLimit -MaxClock $MaxClock"
     if (-not $p) { exit 1 }  # The UAC prompt was declined.
     exit $p.ExitCode
 }
 
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c nvidia-smi -pl 220 && nvidia-smi -lgc 300,1800'
+$steps = @()
+if ($PowerLimit -gt 0) { $steps += "nvidia-smi -pl $PowerLimit" }
+if ($MaxClock -gt 0) { $steps += "nvidia-smi -lgc 300,$MaxClock" }
+if (-not $steps) { exit 0 }  # This card allows neither limit, so there is nothing to reapply at boot.
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c ' + ($steps -join ' && '))
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $trigger.Delay = 'PT1M'  # The NVIDIA driver may not be ready the moment Windows starts.
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest

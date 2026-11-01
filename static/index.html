@@ -3,53 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>홍보영상 스튜디오</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<title>홍보 영상 · createMovie</title>
+<link rel="stylesheet" href="/theme.css">
 <style>
-  :root {
-    --bg:#ECEEF1; --surface:#FFFFFF; --surface-2:#F5F6F8; --ink:#15171C; --ink-2:#464C57; --mute:#7C828D;
-    --line:#DDE1E6; --line-2:#C2C7CF; --brand:#1F2B4D; --on-brand:#FFFFFF; --tally:#E5412F; --tally-soft:rgba(229,65,47,.10);
-    --ok:#1E8757; --ok-soft:rgba(30,135,87,.10);
-    --shadow:0 1px 2px rgba(16,20,30,.05), 0 6px 24px rgba(16,20,30,.06);
-    --sans:"Pretendard Variable", Pretendard, "Malgun Gothic", system-ui, sans-serif;
-    --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
-  }
-  @media (prefers-color-scheme: dark) { :root {
-    --bg:#101217; --surface:#181B21; --surface-2:#1F232A; --ink:#ECEEF2; --ink-2:#B7BCC6; --mute:#868C97;
-    --line:#2A2F37; --line-2:#3A404A; --brand:#E8EBF2; --on-brand:#121419; --tally:#FF5A47; --tally-soft:rgba(255,90,71,.14);
-    --ok:#3DBB82; --ok-soft:rgba(61,187,130,.14); --shadow:none;
-  } }
-  * { box-sizing:border-box; }
-  html { -webkit-text-size-adjust:100%; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--sans); letter-spacing:-0.01em; }
-  button, input, textarea, select { font:inherit; color:inherit; letter-spacing:inherit; }
-  :focus-visible { outline:2px solid var(--tally); outline-offset:2px; }
-  [hidden] { display:none !important; }
-  .mono { font-family:var(--mono); letter-spacing:0; font-variant-numeric:tabular-nums; }
-
   /* ---------- 상단 바 ---------- */
-  .top { position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
-  .top-in { max-width:1240px; margin:0 auto; padding:0 24px; height:60px; display:flex; align-items:center; gap:28px; }
-  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; white-space:nowrap; }
-  .brand i { width:10px; height:10px; border-radius:50%; background:var(--tally); box-shadow:0 0 0 4px var(--tally-soft); }
   .stepper { display:flex; gap:4px; margin-left:auto; }
   .stepper button { display:flex; align-items:center; gap:8px; border:0; background:none; padding:8px 12px; border-radius:8px; color:var(--mute); cursor:pointer; font-size:14px; }
   .stepper button:disabled { cursor:default; opacity:.55; }
   .stepper button b { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font:600 12px var(--mono); border:1.5px solid var(--line-2); }
   .stepper button.done { color:var(--ink-2); }
-  .stepper button.done b { border-color:var(--ok); background:var(--ok); color:#fff; }
+  .stepper button.done b { border-color:var(--ok); background:var(--ok); color:var(--surface); }
   .stepper button.on { color:var(--ink); font-weight:600; background:var(--surface); box-shadow:var(--shadow); }
   .stepper button.on b { border-color:var(--tally); background:var(--tally); color:#fff; }
   .stepper button:not(:disabled):not(.on):hover { background:var(--surface-2); }
 
   /* ---------- 레이아웃 ---------- */
-  .shell { max-width:1240px; margin:0 auto; padding:28px 24px 0; display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:24px; align-items:start; }
   main { min-width:0; }
   .head { margin:4px 0 20px; }
   .head h1 { margin:0; font-size:26px; line-height:1.3; font-weight:700; letter-spacing:-0.03em; }
   .head p { margin:6px 0 0; color:var(--ink-2); }
-  .panel { background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:22px; }
   .panel + .panel { margin-top:16px; }
   .panel-h { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:0 0 14px; }
   .panel-h h2 { margin:0; font-size:16px; font-weight:700; }
@@ -59,7 +31,7 @@
   .actions .sp { flex:1; }
 
   /* ---------- 사이드 요약 ---------- */
-  aside { position:sticky; top:84px; }
+  aside { position:sticky; top:calc(84px + var(--nav-h, 0px)); }
   .sum { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow); }
   .sum h3 { margin:0 0 12px; font-size:13px; color:var(--mute); font-weight:600; }
   .sum dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:10px 12px; font-size:14px; }
@@ -68,23 +40,9 @@
   .sum .usage { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); font-size:12px; color:var(--mute); }
 
   /* ---------- 공통 컨트롤 ---------- */
-  .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:42px; padding:0 18px; border-radius:10px; border:1px solid var(--line-2);
-         background:var(--surface); cursor:pointer; font-weight:600; font-size:14px; text-decoration:none; color:var(--ink); transition:background .15s, border-color .15s; }
-  .btn:hover { background:var(--surface-2); }
-  .btn.primary { background:var(--brand); border-color:var(--brand); color:var(--on-brand); padding:0 22px; }
-  .btn.primary:hover { filter:brightness(1.12); }
-  .btn.ghost { border-color:transparent; background:none; color:var(--ink-2); }
-  .btn.ghost:hover { background:var(--surface-2); }
-  .btn.danger { color:var(--tally); }
-  .btn:disabled { opacity:.45; cursor:not-allowed; filter:none; }
-  .btn.sm { height:34px; padding:0 12px; font-size:13px; }
   .field { display:block; }
   .field > span { display:block; font-size:13px; font-weight:600; color:var(--ink-2); margin:0 0 6px; }
   .field > small { display:block; font-size:12px; color:var(--mute); margin-top:6px; }
-  .input, textarea.input { width:100%; height:42px; padding:0 12px; border:1px solid var(--line-2); border-radius:9px; background:var(--surface); transition:border-color .15s, box-shadow .15s; }
-  textarea.input { height:auto; min-height:128px; padding:11px 12px; resize:vertical; line-height:1.6; }
-  .input:focus { outline:none; border-color:var(--ink-2); box-shadow:0 0 0 3px var(--surface-2); }
-  .input[readonly] { background:var(--surface-2); color:var(--mute); }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .chips { display:flex; flex-wrap:wrap; gap:6px; }
   .chip { height:32px; padding:0 12px; border-radius:16px; border:1px solid var(--line-2); background:var(--surface); cursor:pointer; font-size:13px; color:var(--ink-2); }
@@ -95,11 +53,6 @@
   .seg button { border:0; background:none; height:34px; padding:0 14px; border-radius:7px; cursor:pointer; font-size:14px; color:var(--ink-2); }
   .seg button[aria-pressed="true"] { background:var(--surface); color:var(--ink); font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,.1); }
   .seg button:disabled { opacity:.45; cursor:not-allowed; }
-  .alert { margin-top:14px; padding:12px 14px; border-radius:10px; background:var(--tally-soft); color:var(--tally); font-size:14px; white-space:pre-wrap; }
-  .alert:empty { display:none; }
-  .okmsg { padding:10px 14px; border-radius:10px; background:var(--ok-soft); color:var(--ok); font-size:14px; font-weight:600; }
-  .okmsg.neutral { background:var(--surface-2); color:var(--ink-2); font-weight:500; }
-  .okmsg:empty { display:none; }
   .spin { width:16px; height:16px; border-radius:50%; border:2px solid currentColor; border-right-color:transparent; animation:spin .8s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
 
@@ -315,7 +268,7 @@
 <body>
 <script src="/nav.js"></script>
 <header class="top"><div class="top-in">
-  <div class="brand"><i></i>홍보영상 스튜디오</div>
+  <div class="brand">홍보 영상</div>
   <nav class="stepper" id="stepper" aria-label="진행 단계">
     <button data-step="1"><b>1</b><span>자료</span></button>
     <button data-step="2"><b>2</b><span>요구사항</span></button>
@@ -325,6 +278,11 @@
   <span class="saved mono" id="saved" aria-live="polite"></span>
   <button class="btn sm" id="openProjects">내 프로젝트</button>
 </div></header>
+<div id="conflict" class="msg warn" role="alert" hidden style="max-width:1192px;margin:12px auto 0">
+  다른 탭이나 기기에서 이 프로젝트가 바뀌어 여기서 고친 내용을 저장하지 않았습니다.
+  <button class="btn sm" id="conflictLoad">최신 내용 불러오기</button>
+  <button class="btn sm" id="conflictForce">이 화면 내용으로 덮어쓰기</button>
+</div>
 
 <div class="shell">
 <main>
@@ -397,7 +355,7 @@
         <div class="seg" id="ratio"><button data-r="landscape" aria-pressed="true">가로 16:9 · 유튜브·TV</button><button data-r="portrait">세로 9:16 · 쇼츠·릴스·스토리</button><button data-r="both">가로 + 세로 둘 다</button></div>
         <small style="color:var(--mute)">세로 화면에서는 사진 속 사람 얼굴을 찾아 잘리지 않게 맞춥니다</small></div>
       <div class="field"><span>개인정보</span>
-        <label class="switch"><input type="checkbox" id="blurOn">사진 속 얼굴 흐리게(모자이크) <small style="color:var(--mute);margin-left:6px">외부 게시용 · 동영상 클립에는 적용되지 않아요</small></label></div>
+        <label class="switch"><input type="checkbox" id="blurOn">사진·동영상 속 얼굴 흐리게(모자이크) <small style="color:var(--mute);margin-left:6px">외부 게시용 · 자동 감지라 놓칠 수 있어 완성본을 확인하세요 · 동영상은 처음 한 번 시간이 걸려요</small></label></div>
       <div class="field"><span>영상 길이</span>
         <div class="len-row">
           <div class="seg" id="lenPresets"><button data-len="15">15초</button><button data-len="30" aria-pressed="true">30초</button><button data-len="60">1분</button><button data-len="120">2분</button></div>
@@ -577,18 +535,30 @@ function summary() {
 }
 
 // ---------- 저장 / 프로젝트 ----------
-let saveT = 0, loading = false, pendingSel = null;
+let saveT = 0, loading = false, pendingSel = null, rev = null, conflict = false, saving = Promise.resolve();
+function saveNow(force) {   // 저장은 한 번에 하나씩: 겹치면 앞 저장이 바꾼 rev를 뒤 저장이 몰라 충돌로 오해한다
+  clearTimeout(saveT);
+  saving = saving.then(async () => {
+    if (!job || conflict && !force) return;
+    const r = await post('/api/save', {job, plan, settings: settings(), rev, force: !!force}).catch(() => null);
+    if (r && r.conflict) return showConflict();
+    if (r && r.ok) { rev = r.rev; showConflict(false); }
+    $('#saved').textContent = r && r.ok ? `저장됨 ${r.saved}` : '저장 실패 · 서버 연결 확인';
+  });
+  return saving;
+}
+function showConflict(on = true) {
+  conflict = on; $('#conflict').hidden = !on;
+  if (on) $('#saved').textContent = '저장 안 됨 · 다른 곳에서 바뀜';
+}
 function settings() {
   return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
           aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked, blur: $('#blurOn').checked, logo: logoMode()};
 }
 function dirty() {   // 바뀔 때마다 1.2초 뒤 자동 저장
-  if (!job || loading) return;
+  if (!job || loading || conflict) return;
   clearTimeout(saveT); $('#saved').textContent = '저장 중…';
-  saveT = setTimeout(async () => {
-    const r = await post('/api/save', {job, plan, settings: settings()}).catch(() => null);
-    $('#saved').textContent = r && r.ok ? `저장됨 ${r.saved}` : '저장 실패 · 서버 연결 확인';
-  }, 1200);
+  saveT = setTimeout(saveNow, 1200);
 }
 async function loadProjects(el, limit) {
   const r = await fetch('/api/projects').then(r => r.json()).catch(() => ({projects: []}));
@@ -609,8 +579,10 @@ async function loadProjects(el, limit) {
 async function openProject(j) {
   const r = await fetch('/api/project/' + j).then(r => r.json()).catch(() => null);
   if (!r) return;
+  clearInterval(poll);
   loading = true; $('#projDlg').open && $('#projDlg').close();
   job = j; meta = r.meta; plan = r.plan; const st = r.settings || {};
+  rev = st._rev || null; showConflict(false);
   $('#brief').value = st.brief || ''; $('#org').value = st.org || '';
   press('#mood', $$('#mood button').find(b => b.textContent === st.mood) || $('#mood button'));
   press('#ratio', $$('#ratio button').find(b => b.dataset.r === st.ratio) || $('#ratio button')); applyRatio();
@@ -635,6 +607,8 @@ async function openProject(j) {
   if (r.render === 'queued' || r.render === 'running') watchRender();
 }
 function newProject() {
+  clearInterval(poll);
+  rev = null; showConflict(false);
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
   $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#subOn').checked = true;
   press('#logoMode', $('#logoMode button'));
@@ -645,6 +619,8 @@ function newProject() {
 $('#openProjects').onclick = () => { loadProjects($('#projList')); $('#projDlg').showModal(); };
 $('#projClose').onclick = () => $('#projDlg').close();
 $('#newProject').onclick = newProject;
+$('#conflictLoad').onclick = () => openProject(job);
+$('#conflictForce').onclick = () => saveNow(true);
 $('#projDlg').addEventListener('click', e => { if (e.target === $('#projDlg')) $('#projDlg').close(); });
 const press = (group, btn) => $$(group + ' button').forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
 
@@ -915,10 +891,12 @@ async function ask(revise) {
   const busy = revise ? $('#redo') : $('#to3'), old = busy.innerHTML;   // 지금 누른 버튼에 진행 표시
   busy.innerHTML = `<span class="spin"></span>${revise ? '수정하는 중' : 'AI가 사진을 살펴보는 중'}`; $('#note').textContent = '';
   const prevPlan = revise ? structuredClone(plan) : null;
-  const r = await post('/api/plan', {job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), style: revise ? (plan.style || styleSel()) : styleSel(), ratio: ratio() === 'both' ? 'portrait' : ratio(), narr:narrSel(),
+  await saveNow();
+  const r = await post('/api/plan', {rev, job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), style: revise ? (plan.style || styleSel()) : styleSel(), ratio: ratio() === 'both' ? 'portrait' : ratio(), narr:narrSel(),
     ...(revise ? {revise, prev: prevPlan} : {})}).catch(() => ({error: '서버에 연결하지 못했습니다. 서버가 켜져 있는지 확인해 주세요.'}));
   btns.forEach(b => b.disabled = false); busy.innerHTML = old;
   if (r.error) { (revise ? $('#e3') : $('#e2')).textContent = r.error; return; }
+  await saving; rev = r.rev;   // 기다리는 동안 자동 저장이 돌았어도 서버의 마지막 값은 이 응답이다
   plan = r.plan; $('#video').removeAttribute('src');
   if (step !== 3) go(3);
   renderPlan();
@@ -1213,7 +1191,9 @@ $('#prevRender').onclick = () => { $('#prevDlg').close(); $('#to4').click(); };
 
 $('#to4').onclick = async () => {
   if (!planOk()) return;
-  const r = await post('/api/render', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+  await saveNow();
+  const r = await post('/api/render', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel(), rev}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+  if (r.conflict) showConflict(); else if (r.rev) rev = r.rev;
   if (r.error) { $('#e3').textContent = r.error; return; }
   watchRender();
 };
@@ -1222,8 +1202,9 @@ function watchRender() {   // 렌더 요청 직후, 또는 렌더 중인 프로�
   $('#h4').textContent = '영상을 만들고 있어요'; $('#p4').hidden = false;
   go(4);
   const t0 = Date.now(); clearInterval(poll);
+  const watching = job;
   poll = setInterval(async () => {
-    const s = await fetch('/api/status/' + job).then(r => r.json()).catch(() => null);
+    const s = await fetch('/api/status/' + watching).then(r => r.json()).catch(() => null);
     if (!s) return;
     const sec = (Date.now() - t0) / 1000;
     $('#rbar').style.width = s.pct + '%'; $('#rpct').textContent = s.pct;
@@ -1260,8 +1241,14 @@ function showOutputs(outs) {   // 완성 영상(가로·세로)과 썸네일
     const lab = o.ratio === 'portrait' ? '세로 9:16' : '가로 16:9', sfx = two ? (o.ratio === 'portrait' ? '_세로' : '_가로') : '';
     return `<div class="out ${o.ratio}"><video src="${u}" controls playsinline preload="metadata"${th ? ` poster="${th}"` : ''}></video>
       <div class="out-f"><b>${lab}</b><a class="btn primary sm" href="${u}" download="${esc(name + sfx)}.mp4">MP4 내려받기</a>
+      ${['localhost', '127.0.0.1'].includes(location.hostname) ? '<button class="btn sm" data-export>저장 폴더로 복사</button>' : ''}
       ${th ? `<a class="btn sm" href="${th}" download="${esc(name + sfx)}_썸네일.jpg">썸네일 JPG</a>` : ''}</div></div>`;
   }).join('') || '<div class="empty">완성된 영상 파일을 찾지 못했습니다.</div>';
+  $$('#outs [data-export]').forEach(b => b.onclick = async () => {
+    const r = await post('/api/export/' + job, {}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+    b.textContent = r.error ? '복사 실패' : '복사됨'; b.title = r.error || r.paths.join('\n');
+    $('#note').textContent = r.error || '저장했습니다: ' + r.paths.join(', ');
+  });
 }   // 지금 프로젝트는 저장된 채로 두고 새로 시작
 go(1); renderAssets();
 { const o = new URLSearchParams(location.search).get('open'); if (o) openProject(o); }

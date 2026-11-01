@@ -2,7 +2,7 @@
 실행: GEMINI_API_KEY 환경변수(또는 이 폴더의 .env)를 준비하고 `python server.py` -> http://localhost:5000
 WORKER_TOKEN을 설정하면 렌더링을 이 서버에서 하지 않고 대기열에 넣어 두고, PC의 렌더 워커(worker/)가 가져가 처리한다.
 이 PC에서 하는 작업(홍보 영상 렌더, /h3의 AI 영상 생성)은 studio.engine.Runner의 대기열 하나로 차례대로 처리한다."""
-import base64, hmac, html, itertools, json, os, random, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid, webbrowser
+import base64, collections, hmac, html, itertools, json, os, random, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid, webbrowser
 from flask import Flask, abort, jsonify, request, send_from_directory
 from PIL import Image, ImageOps
 import beats
@@ -21,6 +21,17 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 워커가 올리는
 app.json.sort_keys = False  # 해상도 목록을 시험한 기본값이 먼저 오는 순서 그대로 보낸다
 app.register_blueprint(h3_routes.app)
 runner = h3_routes.runner
+RENDER_SILENCE_S = 20 * 60  # 렌더가 이만큼 아무 출력이 없으면 멈춘 것으로 본다. 대기열 전체가 걸리면 안 된다.
+
+
+@app.before_request
+def same_site_only():
+    """다른 사이트가 브라우저를 통해 이 서버를 조작하지 못하게 막는다. 워커는 토큰으로 인증하고 Origin을 보내지 않는다."""
+    origin = request.headers.get('Origin')
+    if origin and request.method not in ('GET', 'HEAD') and origin.split('//')[-1] != request.host:
+        abort(403)
+    if BOUND_LOCAL and request.host.rsplit(':', 1)[0] not in ('127.0.0.1', 'localhost'):
+        abort(403)  # DNS rebinding 차단. 이 PC에서만 열어 둔 경우에만 주소를 알 수 있다.
 _state_lock = threading.Lock()
 
 
@@ -33,6 +44,7 @@ def env(name):
     return k
 
 
+BOUND_LOCAL = False  # python server.py로 127.0.0.1에만 열었을 때 True(아래 __main__). 도커·HOST 지정은 주소를 미리 모른다.
 WORKER_TOKEN = env('WORKER_TOKEN')  # 있으면 '워커 모드': 렌더링은 PC 워커가 한다
 
 
@@ -55,11 +67,15 @@ def jobdir(job):
 
 
 def meta_of(job):
-    return json.load(open(os.path.join(jobdir(job), 'meta.json'), encoding='utf-8'))
+    with open(os.path.join(jobdir(job), 'meta.json'), encoding='utf-8') as fp:
+        return json.load(fp)
 
 
 def save_meta(job, m):
-    json.dump(m, open(os.path.join(jobdir(job), 'meta.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+    save_json(job, 'meta.json', m)
+
+
+_job_locks = collections.defaultdict(threading.RLock)  # meta.json을 읽고 고쳐 쓰는 동안 같은 프로젝트의 다른 요청이 끼어들지 못하게
 
 
 # ---------- 업로드 ----------
@@ -72,31 +88,32 @@ def upload():
     gs = os.path.join(d, 'assets', 'gsap.min.js')
     if not os.path.exists(gs):
         shutil.copy(os.path.join(HERE, 'gsap.min.js'), gs)
-    m = meta_of(job) if os.path.exists(os.path.join(d, 'meta.json')) else {'photos': [], 'audio': None}
-    skipped = []
-    for f, path in zip(request.files.getlist('files'), request.form.getlist('paths')):
-        path = path.replace('\\', '/').lstrip('/')
-        ext = os.path.splitext(path)[1].lower()
-        if ext in ('.jpg', '.jpeg', '.png', '.webp'):
-            try:
-                im = ImageOps.exif_transpose(Image.open(f.stream)).convert('RGB')
-            except Exception:
-                skipped.append(path); continue
-            pid = f'p{len(m["photos"]) + 1:03d}'
-            im.thumbnail((1920, 1920)); im.save(os.path.join(d, 'assets', pid + '.jpg'), quality=88)
-            ar = round(im.width / im.height, 4)
-            im.thumbnail((384, 384)); im.save(os.path.join(d, 'thumbs', pid + '.jpg'), quality=75)
-            parts = path.split('/')
-            m['photos'].append(analyze_photo(d, {'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else '', 'ar': ar}))
-        elif ext in media.VIDEO_EXT:
-            if not add_video(d, m, path, ext, f.save):
+    with _job_locks[job]:
+        m = meta_of(job) if os.path.exists(os.path.join(d, 'meta.json')) else {'photos': [], 'audio': None}
+        skipped = []
+        for f, path in zip(request.files.getlist('files'), request.form.getlist('paths')):
+            path = path.replace('\\', '/').lstrip('/')
+            ext = os.path.splitext(path)[1].lower()
+            if ext in ('.jpg', '.jpeg', '.png', '.webp'):
+                try:
+                    im = ImageOps.exif_transpose(Image.open(f.stream)).convert('RGB')
+                except Exception:
+                    skipped.append(path); continue
+                pid = f'p{len(m["photos"]) + 1:03d}'
+                im.thumbnail((1920, 1920)); im.save(os.path.join(d, 'assets', pid + '.jpg'), quality=88)
+                ar = round(im.width / im.height, 4)
+                im.thumbnail((384, 384)); im.save(os.path.join(d, 'thumbs', pid + '.jpg'), quality=75)
+                parts = path.split('/')
+                m['photos'].append(analyze_photo(d, {'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else '', 'ar': ar}))
+            elif ext in media.VIDEO_EXT:
+                if not add_video(d, m, path, ext, f.save):
+                    skipped.append(path)
+            elif ext == '.mp3':
+                f.save(os.path.join(d, 'assets', 'bgm.mp3')); m['audio'] = os.path.basename(path); m.pop('beats', None)
+            else:
                 skipped.append(path)
-        elif ext == '.mp3':
-            f.save(os.path.join(d, 'assets', 'bgm.mp3')); m['audio'] = os.path.basename(path); m.pop('beats', None)
-        else:
-            skipped.append(path)
-    save_meta(job, m)
-    song_beats(job, m)
+        save_meta(job, m)
+        song_beats(job, m)
     return jsonify(job=job, **m, skipped=skipped)
 
 
@@ -164,8 +181,10 @@ def ensure_media(job, m=None):
     """예전 프로젝트: 얼굴·비율 정보가 없으면 지금 채운다."""
     m = m or meta_of(job)
     if any('ar' not in p or ('faces' not in p and media._detector()) for p in m['photos']):
-        m['photos'] = [analyze_photo(jobdir(job), p) for p in m['photos']]
-        save_meta(job, m)
+        with _job_locks[job]:
+            m = meta_of(job)  # 기다리는 사이 바뀌었을 수 있다
+            m['photos'] = [analyze_photo(jobdir(job), p) for p in m['photos']]
+            save_meta(job, m)
     return m
 
 
@@ -173,27 +192,32 @@ def ensure_media(job, m=None):
 def logo():
     """기관 로고 올리기/지우기. 흰 배경은 자동으로 투명하게."""
     job = request.form.get('job', '')
-    m = meta_of(job); dst = os.path.join(jobdir(job), 'assets', 'logo.png')
-    if request.form.get('remove'):
-        if os.path.exists(dst):
-            os.remove(dst)
-        m.pop('logo', None)
-    else:
-        f = request.files.get('file')
-        if not f:
-            return jsonify(error='로고 파일이 없습니다.'), 400
-        try:
-            w, h = media.clean_logo(f.stream, dst)
-        except Exception:
-            return jsonify(error='이미지를 읽지 못했습니다. PNG나 JPG로 올려 주세요.'), 400
-        m['logo'] = {'w': w, 'h': h, 't': int(time.time())}
-    save_meta(job, m)
+    dst = os.path.join(jobdir(job), 'assets', 'logo.png')
+    with _job_locks[job]:
+        m = meta_of(job)
+        if request.form.get('remove'):
+            if os.path.exists(dst):
+                os.remove(dst)
+            m.pop('logo', None)
+        else:
+            f = request.files.get('file')
+            if not f:
+                return jsonify(error='로고 파일이 없습니다.'), 400
+            try:
+                w, h = media.clean_logo(f.stream, dst)
+            except Exception:
+                return jsonify(error='이미지를 읽지 못했습니다. PNG나 JPG로 올려 주세요.'), 400
+            m['logo'] = {'w': w, 'h': h, 't': int(time.time())}
+        save_meta(job, m)
     return jsonify(logo=m.get('logo'))
 
 
 @app.post('/api/reset')
 def reset():
-    d = jobdir(request.json['job'])
+    job = request.json['job']
+    d = jobdir(job)
+    if os.path.isdir(d) and get_status(job)['state'] in ('queued', 'running'):
+        return jsonify(error='렌더링 중이거나 대기 중인 프로젝트는 지울 수 없습니다. 대기열에서 빼거나 멈춘 뒤 지워 주세요.'), 409
     shutil.rmtree(d, ignore_errors=True)
     return jsonify(ok=True)
 
@@ -245,7 +269,7 @@ def gemini(parts):
             with open(os.path.join(JOBS, 'usage.log'), 'a', encoding='utf-8') as lf:  # 호출별 토큰 사용량 기록
                 lf.write(time.strftime('%Y-%m-%d %H:%M:%S ') + json.dumps(u) + '\n')
             return json.loads(resp['candidates'][0]['content']['parts'][0]['text']), u
-        except (urllib.error.URLError, KeyError, ValueError, TimeoutError) as e:
+        except (OSError, KeyError, IndexError, ValueError) as e:  # URLError·TimeoutError·연결 끊김은 모두 OSError
             last = f'{m}(키 …{key[-4:]}): {e}'
     raise RuntimeError('AI 호출 실패(사용량 한도일 수 있어요. 잠시 후 다시 시도): ' + str(last))
 
@@ -303,6 +327,8 @@ def plan():
     m = meta_of(b['job'])
     if not m['photos']:
         return jsonify(error='사진을 먼저 올려 주세요.'), 400
+    if stale(b):
+        return CONFLICT
     length = max(15, min(600, int(b.get('length', 30))))
     folders = {p['folder'] for p in m['photos'] if p['folder']}
     hi = max_scenes(length)
@@ -358,8 +384,10 @@ def plan():
             raise RuntimeError('AI가 장면을 만들지 못했습니다. 다시 시도해 주세요.')
     except (RuntimeError, KeyError, TypeError) as e:
         return jsonify(error=str(e)), 502
-    json.dump(out, open(os.path.join(jobdir(b['job']), 'plan.json'), 'w', encoding='utf-8'), ensure_ascii=False)
-    return jsonify(plan=out, usage=usage)
+    with _job_locks[b['job']]:
+        save_json(b['job'], 'plan.json', out)
+        rev = bump_rev(b['job'])
+    return jsonify(plan=out, usage=usage, rev=rev)
 
 
 # ---------- 내레이션 (edge-tts, 무료·키 불필요) ----------
@@ -388,16 +416,21 @@ def duration(path):
 def tts_many(job, items):
     """[(text, voice_key, rate%)] -> [(파일명, 길이)]. 같은 문장·목소리·속도는 캐시를 재사용."""
     import edge_tts, hashlib, asyncio
-    out, todo = [], []
+    out, todo = [], {}
     for text, v, r in items:
         name = 'tts_' + hashlib.sha1(f'{text}|{v}|{r}'.encode()).hexdigest()[:12] + '.mp3'
         path = os.path.join(jobdir(job), 'assets', name)
-        if not os.path.exists(path):
-            todo.append(edge_tts.Communicate(text, VOICES.get(v, VOICES['sunhi']), rate=f'{r:+d}%').save(path))
+        if not os.path.exists(path) and name not in todo:  # 같은 문장이 둘이면 한 번만 만든다
+            todo[name] = (text, v, r, path)
         out.append((name, path))
 
+    async def save_one(text, v, r, path):  # 실패하면 받다 만 파일이 캐시로 남지 않게 임시 파일에 받는다
+        part = path + '.part'
+        await edge_tts.Communicate(text, VOICES.get(v, VOICES['sunhi']), rate=f'{r:+d}%').save(part)
+        os.replace(part, path)
+
     async def run():
-        await asyncio.gather(*todo)
+        await asyncio.gather(*(save_one(*a) for a in todo.values()))
     try:
         if todo:
             asyncio.run(run())
@@ -443,11 +476,14 @@ def song_beats(job, m=None):
     if not m.get('audio'):
         return None
     if 'beats' not in m:
-        try:
-            m['beats'] = beats.analyze(os.path.join(jobdir(job), 'assets', 'bgm.mp3'))
-        except Exception:
-            m['beats'] = None
-        save_meta(job, m)
+        with _job_locks[job]:
+            m = meta_of(job)
+            if 'beats' not in m:
+                try:
+                    m['beats'] = beats.analyze(os.path.join(jobdir(job), 'assets', 'bgm.mp3'))
+                except Exception:
+                    m['beats'] = None
+                save_meta(job, m)
     return m['beats']
 
 
@@ -487,6 +523,8 @@ def get_status(job):
 def set_status(job, only_rev=None, **kw):
     """only_rev를 주면 그 렌더 요청이 아직 최신일 때만 바꾼다(사용자가 그 사이 다시 렌더를 누른 경우 무시)."""
     with _state_lock:
+        if not os.path.isdir(jobdir(job)):
+            return False
         s = get_status(job)
         if only_rev is not None and s.get('rev') != only_rev:
             return False
@@ -517,18 +555,34 @@ def finalize(job, rev):
     return True
 
 
-def run_render(job, rev, on_proc=lambda p: None, on_pct=lambda pct: None, stopped=lambda: False):
+def run_render(job, rev, on_pct=lambda pct: None, stopped=lambda: False):
     """PC 한 대로 쓸 때: 이 서버에서 직접 렌더한다(출력이 여러 개면 차례로). 대기열이 한 번에 하나만 부른다."""
     if not set_status(job, rev, state='running', pct=0):
         return
     outs = get_status(job).get('outputs') or []
     tail, pct = [], 0
     for k, o in enumerate(outs):
+        if stopped():
+            set_status(job, rev, state='error', pct=pct, log='멈추기를 눌러 렌더링을 중단했습니다.'); return
         part = o['out'] + '.new.mp4'
         pr = subprocess.Popen([shutil.which('npx') or 'npx', '-y', 'hyperframes', 'render', '-c', o['html'], '-o', part],
                               cwd=jobdir(job), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
-        on_proc(pr)
+        last, started = [time.time()], time.time()
+
+        def watchdog(p=pr, t0=started):
+            # npx는 cmd를 거쳐 node를 띄운다. 시작 직후에 cmd만 죽이면 node가 고아로 남아 렌더가 계속되므로 잠깐 기다린다.
+            while p.poll() is None:
+                if stopped() and time.time() - t0 > 3:
+                    engine.kill_tree(p.pid)
+                    return
+                if time.time() - last[0] > RENDER_SILENCE_S:
+                    tail.append(f'{RENDER_SILENCE_S // 60}분 동안 렌더링 응답이 없어 중단했습니다.')
+                    engine.kill_tree(p.pid)
+                    return
+                time.sleep(1)
+        threading.Thread(target=watchdog, daemon=True).start()
         for line in pr.stdout:
+            last[0] = time.time()
             mm = re.search(r'"pct":(\d+)', line)
             if mm:
                 v = int((k + int(mm.group(1)) / 100) / len(outs) * 100)
@@ -569,11 +623,17 @@ class PromoQueue:
                 for j, s in self._jobs() if s['state'] == 'queued']
 
     def run(self, job, r):
-        rev = get_status(job).get('rev')
+        st = get_status(job)
+        if st['state'] != 'queued':  # 고른 직후 대기열에서 뺐거나 지웠다
+            return
+        rev = st.get('rev')
         try:
-            run_render(job, rev, r.set_external_proc, lambda pct: r._set_live(stage='렌더링', fraction=pct / 100), r.stop_event.is_set)
+            run_render(job, rev, lambda pct: r._set_live(stage='렌더링', fraction=pct / 100), r.stop_event.is_set)
         except Exception as e:
             set_status(job, rev, state='error', log=f'{type(e).__name__}: {e}')
+
+    def set_at(self, job, at):
+        set_status(job, get_status(job).get('rev'), queued_at=at)
 
     def remove(self, job):
         s = get_status(job)
@@ -595,8 +655,9 @@ runner.external = PromoQueue()
 def queue():
     """상단 막대가 쓰는 대기열 상태(읽기 전용). 조작은 /h3/api/queue/*로, 이 PC에서만 된다."""
     s = runner.snapshot()
+    g = (s['gpu'] or [None])[-1]
     return jsonify(busy=s['busy'], current=s['current'], queue=s['queue'], paused=s['paused'], pause_reason=s['pause_reason'],
-                   stage=s['live']['stage'], fraction=s['live']['fraction'], local=h3_routes.is_local())
+                   stage=s['live']['stage'], fraction=s['live']['fraction'], gpu=g, gpu_age=time.time() - g['t'] if g else None, local=h3_routes.is_local())
 
 
 def build_from_request(b, **kw):
@@ -608,6 +669,8 @@ def build_from_request(b, **kw):
     ids = [x['id'] for x in m['photos']]
     pick = lambda v: v if v in ids else ids[0]
     b['plan']['scenes'] = [normalize_scene(s, ids, pick) for s in b['plan']['scenes']]
+    for k in ('intro_photo', 'outro_photo'):  # 그대로 HTML에 들어가는 값이라 실제 사진 id만 허용
+        b['plan'][k] = pick(b['plan'].get(k))
     ratio = kw.pop('ratio', None) or ('portrait' if b.get('ratio') == 'portrait' else 'landscape')
     return build(b['job'], b['plan'], length, a, ratio=ratio, narr=b.get('narr'), **kw)
 
@@ -625,14 +688,20 @@ def render():
     b = request.json
     if not WORKER_TOKEN and not shutil.which('npx'):
         return jsonify(error='Node.js가 없어 렌더링할 수 없습니다. 상단의 "설치·점검"에서 설치해 주세요.'), 400
+    if stale(b):
+        return CONFLICT
     outs = outputs_for(b.get('ratio'))
     try:
         cut = []
         for o in outs:
             cut = build_from_request(b, name=o['html'], ratio=o['ratio'])
-        save_json(b['job'], 'plan.json', b['plan'])  # 렌더 시 화면에서 고친 구성도 저장
-        st0 = scene_timing(b['job'], max(15, min(600, int(b.get('length', 30)))), len(b['plan']['scenes']),
-                           b.get('audio') if meta_of(b['job'])['audio'] else None)[0][0]
+        with _job_locks[b['job']]:
+            save_json(b['job'], 'plan.json', b['plan'])  # 렌더 시 화면에서 고친 구성도 저장
+            edit_rev = bump_rev(b['job'])
+        a = b.get('audio') if meta_of(b['job'])['audio'] else None  # build_from_request와 같은 규칙으로 맞춰야 썸네일 시각이 영상과 맞다
+        if a:
+            a = {'start': max(0.0, float(a['start'])), 'dur': max(1.0, min(float(a['dur']), max(15, min(600, int(b.get('length', 30)))))), 'sync': a.get('sync', True) is not False}
+        st0 = scene_timing(b['job'], max(15, min(600, int(b.get('length', 30)))), len(b['plan']['scenes']), a)[0][0]
     except (KeyError, IndexError, ValueError) as e:
         return jsonify(error='구성 정보가 올바르지 않습니다: %s' % e), 400
     except RuntimeError as e:
@@ -647,7 +716,7 @@ def render():
         mark_queued()
     else:
         runner.enqueue_external(mark_queued)
-    return jsonify(ok=True, cut=cut)
+    return jsonify(ok=True, cut=cut, rev=edit_rev)
 
 
 # ---------- PC 렌더 워커용 API (WORKER_TOKEN 설정 시) ----------
@@ -655,6 +724,7 @@ def render():
 # 받은 파일로 렌더한 뒤 /progress로 진행률, /done으로 완성 영상을 올린다.
 STALE = 600  # 진행 보고가 이 시간(초) 동안 없으면 워커가 꺼진 것으로 보고 다시 대기열로
 _worker = {'seen': 0.0, 'name': ''}
+_claim_lock = threading.Lock()
 
 
 def worker_auth():
@@ -700,10 +770,21 @@ def worker_claim():
     for j in os.listdir(JOBS) if os.path.isdir(JOBS) else []:
         if not re.fullmatch(r'[0-9a-f]{12}', j):
             continue
+        try:
+            s = get_status(j)
+            if (s['state'] == 'queued' or (s['state'] == 'running' and now - s.get('updated', 0) > STALE)) and s.get('rev'):
+                cands.append((s.get('queued_at', 0), j, s['rev']))
+        except (ValueError, OSError):
+            continue  # 망가진 작업 하나 때문에 다른 작업까지 못 가져가면 안 된다
+    with _claim_lock:  # 두 워커가 같은 작업을 동시에 가져가지 않게
+        return claim_first(sorted(cands), now)
+
+
+def claim_first(cands, now):
+    for _, j, rev in cands:
         s = get_status(j)
-        if s['state'] == 'queued' or (s['state'] == 'running' and now - s.get('updated', 0) > STALE):
-            cands.append((s.get('queued_at', 0), j, s['rev']))
-    for _, j, rev in sorted(cands):
+        if s.get('rev') != rev or not (s['state'] == 'queued' or (s['state'] == 'running' and now - s.get('updated', 0) > STALE)):
+            continue
         if set_status(j, rev, state='running', pct=0):
             outs = get_status(j).get('outputs') or outputs_for('landscape')
             refs = set()
@@ -825,11 +906,36 @@ def preview():
 # ---------- 프로젝트 저장 / 불러오기 ----------
 def load_json(job, name, default=None):
     f = os.path.join(jobdir(job), name)
-    return json.load(open(f, encoding='utf-8')) if os.path.exists(f) else default
+    if not os.path.exists(f):
+        return default
+    with open(f, encoding='utf-8') as fp:
+        return json.load(fp)
 
 
 def save_json(job, name, data):
-    json.dump(data, open(os.path.join(jobdir(job), name), 'w', encoding='utf-8'), ensure_ascii=False)
+    """임시 파일에 쓰고 바꿔치기: 저장 중 꺼져도 망가진 파일이 남지 않는다."""
+    f = os.path.join(jobdir(job), name)
+    with open(f + '.tmp', 'w', encoding='utf-8') as fp:
+        json.dump(data, fp, ensure_ascii=False)
+    os.replace(f + '.tmp', f)
+
+
+# 같은 프로젝트를 두 탭이나 두 기기에서 고칠 때 낡은 화면이 새 내용을 덮어쓰지 못하게 한다.
+# 저장할 때마다 project.json의 _rev가 바뀌고, 화면은 자기가 마지막으로 본 값을 보낸다.
+CONFLICT = {'conflict': True, 'error': '다른 탭이나 기기에서 이 프로젝트가 바뀌었습니다.'}, 409
+
+
+def stale(b):
+    if 'rev' not in b or b.get('force'):
+        return False
+    return ((load_json(b['job'], 'project.json') or {}).get('_rev') or None) != (b['rev'] or None)
+
+
+def bump_rev(job, settings=None):
+    st = settings if settings is not None else (load_json(job, 'project.json') or {})
+    st['_rev'] = uuid.uuid4().hex[:8]
+    save_json(job, 'project.json', st)
+    return st['_rev']
 
 
 @app.post('/api/save')
@@ -837,10 +943,29 @@ def save():
     b = request.json
     if not os.path.exists(os.path.join(jobdir(b['job']), 'meta.json')):
         return jsonify(error='프로젝트를 찾을 수 없습니다.'), 404
-    if b.get('plan'):
-        save_json(b['job'], 'plan.json', b['plan'])
-    save_json(b['job'], 'project.json', b.get('settings') or {})
-    return jsonify(ok=True, saved=time.strftime('%H:%M'))
+    with _job_locks[b['job']]:
+        if stale(b):
+            return CONFLICT
+        if b.get('plan'):
+            save_json(b['job'], 'plan.json', b['plan'])
+        rev = bump_rev(b['job'], b.get('settings') or {})
+    return jsonify(ok=True, saved=time.strftime('%H:%M'), rev=rev)
+
+
+@app.post('/api/export/<job>')
+def export(job):
+    """완성 영상을 설치·점검에서 정한 저장 폴더로 복사한다. 이 PC의 폴더에 쓰므로 이 PC에서만 된다."""
+    if not h3_routes.is_local():
+        abort(403)
+    title = (load_json(job, 'plan.json') or {}).get('title') or '홍보영상'
+    outs = done_outputs(job)
+    try:
+        paths = [str(engine.export_video(os.path.join(jobdir(job), o['file']), title + ('_세로' if len(outs) > 1 and o['ratio'] == 'portrait' else '_가로' if len(outs) > 1 else ''))[0]) for o in outs]
+    except engine.StudioError as e:
+        return jsonify(error=str(e)), 400
+    if not paths:
+        return jsonify(error='완성된 영상이 없습니다.'), 400
+    return jsonify(paths=paths)
 
 
 @app.get('/api/projects')
@@ -850,10 +975,13 @@ def projects():
         d = os.path.join(JOBS, j)
         if not re.fullmatch(r'[0-9a-f]{12}', j) or not os.path.exists(os.path.join(d, 'meta.json')):
             continue
-        m = meta_of(j)
+        try:
+            m = meta_of(j)
+            pl, st = load_json(j, 'plan.json') or {}, load_json(j, 'project.json') or {}
+        except (ValueError, OSError):
+            continue  # 망가진 폴더 하나가 목록 전체를 막으면 안 된다
         if not m['photos']:
             continue
-        pl, st = load_json(j, 'plan.json') or {}, load_json(j, 'project.json') or {}
         mt = max(os.path.getmtime(os.path.join(d, f)) for f in ('meta.json', 'plan.json', 'project.json', 'output.mp4')
                  if os.path.exists(os.path.join(d, f)))
         out.append({'job': j, 'title': pl.get('title') or '제목 없음', 'mtime': mt,
@@ -925,7 +1053,8 @@ def setup_status():
         promo.insert(1, ('Node.js 22 이상 (렌더링)', node_ok, 'winget install -e --id OpenJS.NodeJS.LTS'))
     items = [{'group': '홍보 영상', 'name': n, 'ok': bool(ok), 'fix': f} for n, ok, f in promo]
     items += [{'group': 'AI 영상 생성', 'name': 'NVIDIA GPU (메모리 8GB 이상)', 'ok': h3['gpu_ok'], 'fix': '설치로 해결되지 않습니다. GPU가 없어도 홍보 영상은 쓸 수 있습니다.'},
-              {'group': 'AI 영상 생성', 'name': 'Wan2GP와 모델 (약 60GB)', 'ok': h3['installed'], 'fix': 'setup.bat -H3'}]
+              {'group': 'AI 영상 생성', 'name': 'Wan2GP와 모델 (약 80GB)', 'ok': h3['installed'], 'fix': 'setup.bat -H3'},
+              {'group': 'AI 영상 생성', 'name': '캐릭터 영상용 모델 (약 21GB, 위 용량에 포함)', 'ok': h3['ref_installed'], 'fix': 'python tools/setup_h3.py'}]
     return {'items': items, 'h3': h3}
 
 
@@ -952,6 +1081,7 @@ def setup_run():
 os.makedirs(JOBS, exist_ok=True)
 
 if __name__ == '__main__':
+    BOUND_LOCAL = not env('HOST')
     runner.recover()
     # HOST=0.0.0.0 이면 같은 네트워크의 다른 기기(폰 등)에서 접속 가능. AI 영상 생성은 그래도 이 PC에서만 된다.
     port = int(env('PORT') or 5000)

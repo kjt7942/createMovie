@@ -1,6 +1,6 @@
 """AI video (H3) routes under /h3. The page and its availability notice are open to anyone who can reach the server,
 but everything else starts GPU jobs or opens local files, so it refuses other machines and other sites."""
-import random, subprocess
+import random, subprocess, sys
 from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
@@ -16,6 +16,8 @@ PUBLIC = {"h3.index", "h3.availability"}
 def is_local():
     # The host and origin checks block DNS rebinding and other sites' pages from starting renders through the browser.
     origin = request.headers.get("Origin")
+    if any(request.headers.get(h) for h in ("X-Forwarded-For", "Forwarded", "X-Real-IP")):
+        return False  # A proxy on this PC connects from 127.0.0.1, so its visitors would otherwise look local.
     return (request.remote_addr in ("127.0.0.1", "::1") and request.host.rsplit(":", 1)[0] in ("127.0.0.1", "localhost")
             and (not origin or origin.split("//")[-1] == request.host))
 
@@ -59,7 +61,7 @@ def project_view(project):
                            estimate=engine.estimate_scene_seconds(project["size"], s["frames"])))
     versions = sorted((d.name for d in (pdir / "versions").iterdir()), key=lambda v: int(v[1:])) if (pdir / "versions").exists() else []
     final = pdir / "final.mp4"
-    return dict(project, scenes=scenes, versions=versions, has_final=final.exists(),
+    return dict(project, cast=engine.project_cast(project), scenes=scenes, versions=versions, has_final=final.exists(),
                 final_stamp=int(final.stat().st_mtime) if final.exists() else 0,
                 folder=str(pdir), final_path=str(final),
                 total_seconds=sum(s["frames"] for s in project["script"]["scenes"]) / engine.FPS)
@@ -99,14 +101,42 @@ def llm_prompt():
     per_scene = total / count
     if per_scene < 4 or per_scene > engine.PRESETS[size]["max_seconds"] or total > engine.MAX_TOTAL_SECONDS:
         raise engine.StudioError(f"장면당 길이가 4~{engine.PRESETS[size]['max_seconds']:g}초가 되도록 맞추세요. 지금은 {per_scene:.1f}초입니다.")
+    cast = engine.load_cast(d.get("characters") or [])
     return jsonify(prompt=engine.llm_prompt(topic, str(d.get("audience", "general audience")), str(d.get("style", "")),
-                                            count, total, size, bool(d.get("loop"))))
+                                            count, total, size, bool(d.get("loop")), cast))
+
+
+@app.get("/api/characters")
+def characters():
+    return jsonify(characters=engine.list_characters(), model_ready=engine.availability()["ref_installed"])
+
+
+@app.post("/api/characters")
+def create_character():
+    images = {view: request.files[view].read() for view in engine.CHARACTER_VIEWS if view in request.files}
+    return jsonify(engine.create_character(request.form.get("name"), request.form.get("description"), images))
+
+
+@app.post("/api/characters/<cid>/delete")
+def delete_character(cid):
+    engine.delete_character(cid)
+    return jsonify(ok=True)
+
+
+@app.get("/api/characters/<cid>/image/<int:n>")
+def character_image(cid, n):
+    path = engine.character_dir(cid) / f"{n}.png"
+    if not path.is_file():
+        abort(404)
+    return send_file(path)
 
 
 @app.post("/api/validate")
 def validate():
     d = body()
     clean, errors, warnings = engine.validate_script(str(d.get("text", "")), d.get("size"))
+    if not errors:
+        errors = engine.cast_errors(clean, len(d.get("characters") or []))
     return jsonify(script=clean, errors=errors, warnings=warnings)
 
 
@@ -121,7 +151,9 @@ def create():
     clean, errors, _ = engine.validate_script(str(d.get("text", "")), d.get("size"))
     if errors:
         raise engine.StudioError(" / ".join(errors))
-    project = engine.create_project(clean, d["size"], d.get("loop"))
+    if d.get("characters") and not engine.availability()["ref_installed"]:
+        raise engine.StudioError("캐릭터 영상용 모델이 없습니다. python tools/setup_h3.py 를 실행해 내려받으세요(약 21GB).")
+    project = engine.create_project(clean, d["size"], d.get("loop"), characters=d.get("characters") or [])
     if d.get("queue"):
         require_available()
         runner.enqueue(project["id"])
@@ -162,6 +194,13 @@ def remove_from_queue():
     return jsonify(ok=True)
 
 
+@app.post("/api/queue/move")
+def move_in_queue():
+    d = body()
+    runner.move(str(d.get("kind")), str(d.get("id")), -1 if d.get("step") == -1 else 1)
+    return jsonify(ok=True)
+
+
 @app.post("/api/stop")
 def stop():
     runner.stop()
@@ -191,14 +230,93 @@ def edit_scene(pid, n):
         p.update(status="queued" if p["status"] == "queued" else "ready",  # An edit must not drop it from the queue.
                  message=f"장면 {n}을 수정했습니다. 생성하면 장면 {n}부터 다시 만듭니다.")
 
-    runner.edit(pid, change)
+    runner.edit(pid, change, d.get("base"))
     return jsonify(ok=True)
 
 
 @app.post("/api/projects/<pid>/settings")
 def settings(pid):
-    loop = bool(body().get("loop"))
-    runner.edit(pid, lambda p: p.update(loop=loop))
+    d = body()
+    loop = bool(d.get("loop"))
+    runner.edit(pid, lambda p: p.update(loop=loop), d.get("base"))
+    return jsonify(ok=True)
+
+
+@app.post("/api/projects/<pid>/delete")
+def delete(pid):
+    runner.delete(pid)
+    return jsonify(ok=True)
+
+
+@app.post("/api/projects/<pid>/export")
+def export(pid):
+    final = engine.project_dir(pid) / "final.mp4"
+    if not final.is_file():
+        raise engine.StudioError("완성된 영상이 없습니다.")
+    path, copied = engine.export_video(final, engine.load_project(pid)["script"]["title"])
+    return jsonify(path=str(path), copied=copied)
+
+
+@app.get("/api/settings")
+def get_settings():
+    return jsonify(export_dir=str(engine.export_dir()), default_dir=str(engine.videos_folder()))
+
+
+@app.post("/api/settings")
+def set_settings():
+    engine.set_export_dir(body().get("export_dir"))
+    return jsonify(export_dir=str(engine.export_dir()))
+
+
+PICK_FOLDER = """import sys, tkinter, tkinter.filedialog as f
+root = tkinter.Tk(); root.withdraw(); root.attributes('-topmost', True)
+print(f.askdirectory(initialdir=sys.argv[1], title='저장 폴더 선택') or '')"""
+
+
+@app.post("/api/settings/pick")
+def pick_folder():
+    """Browsers cannot hand a page a real folder path, so the dialog runs as a separate process on this PC."""
+    try:
+        r = subprocess.run([sys.executable, "-X", "utf8", "-c", PICK_FOLDER, str(engine.export_dir())], capture_output=True, text=True,
+                           encoding="utf-8", timeout=300, creationflags=engine.NO_WINDOW)
+    except (OSError, subprocess.TimeoutExpired):
+        raise engine.StudioError("폴더 선택 창을 열지 못했습니다. 경로를 직접 입력하세요.")
+    if r.returncode != 0:
+        raise engine.StudioError("폴더 선택 창을 열지 못했습니다. 경로를 직접 입력하세요.")
+    return jsonify(path=r.stdout.strip())
+
+
+@app.get("/api/storage")
+def storage():
+    return jsonify(engine.storage_report())
+
+
+@app.post("/api/storage/clean")
+def clean_storage():
+    return jsonify(freed=runner.clean())
+
+
+@app.get("/api/gpu")
+def gpu():
+    card = engine.gpu_card()
+    sample = engine.gpu_sample()
+    return jsonify(card=card, limits=engine.gpu_limits(card), suggested=engine.suggested_limits(card), current=sample["limit"] if sample else None,
+                   test=engine.load_settings().get("gpu_test"), testing=runner.test_running(), presets=engine.PRESETS,
+                   estimates={s: engine.estimate_scene_seconds(s, engine.MIN_FRAMES) + engine.PROJECT_OVERHEAD_S for s in engine.PRESETS})
+
+
+@app.post("/api/gpu/apply")
+def gpu_apply():
+    require_idle()
+    d = body()
+    engine.apply_gpu_limits(d.get("power"), d.get("clock"))
+    return jsonify(ok=True)
+
+
+@app.post("/api/gpu/test")
+def gpu_test():
+    require_available()
+    runner.start_test(body().get("size"))
     return jsonify(ok=True)
 
 

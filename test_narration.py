@@ -16,7 +16,7 @@ html = open(os.path.join(server.JOBS, job, 'preview.html'), encoding='utf-8').re
 tags = re.findall(r'<audio id="nr\d+" src="assets/(tts_\w+\.mp3)" data-start="([\d.]+)" data-duration="([\d.]+)"', html)
 assert len(tags) == len(p['scenes']) + 2, tags
 assert 'data-volume="0.25"' in html, '내레이션이 있으면 배경음악을 낮춰야 함'
-slots = server.narr_slots(30, len(p['scenes']))
+slots = server.narr_slots(*server.beats.snap_times(30, len(p['scenes'])), 30)
 for (f, s, d), (a, b) in zip(tags, slots):
     assert abs(float(s) - round(a, 2)) < 0.01 and float(d) <= b - a + 0.01, (f, s, d, a, b)
 print('잘린 구간:', pv['cut'] or '없음')

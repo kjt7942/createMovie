@@ -488,6 +488,8 @@ class Media:
     """사진/동영상 태그를 만든다: 얼굴 모자이크 사본, 초점 기준 자르기(object-position), 동영상 클립."""
     def __init__(self, job_dir, photos, blur, portrait):
         self.dir, self.ph, self.blur, self.portrait, self.n = job_dir, photos or {}, blur, portrait, 0
+        if blur and not media._detector():  # 조용히 넘어가면 얼굴이 그대로 나간다
+            raise RuntimeError('얼굴 인식 모델이 없어 모자이크할 수 없습니다. python tools/get_fonts.py를 실행해 주세요.')
         self.W, self.H = (1080, 1920) if portrait else (1920, 1080)
 
     def box(self, t, v):   # 사진이 들어갈 상자의 가로세로 비율(대략)
@@ -507,7 +509,7 @@ class Media:
 
     def _img(self, pid):
         info = self.ph.get(pid, {})
-        if self.blur and info.get('faces') and info.get('kind') != 'video':
+        if self.blur and info.get('faces'):
             dst = os.path.join(self.dir, 'assets', pid + '_b.jpg')
             if not os.path.exists(dst):
                 media.blurred(os.path.join(self.dir, 'assets', pid + '.jpg'), dst, info['faces'])
@@ -533,8 +535,16 @@ class Media:
         avail = max(0.1, vdur - off)
         rate = 1.0 if avail >= dur else round(max(0.5, avail / dur), 3)
         play = round(min(dur, avail / rate), 2)
-        return (f'<img class="{cls}" src="assets/{pid}_end.jpg" alt=""{pos} />'
-                f'<video id="vd{self.n}" class="{cls} clip" src="assets/{info["src"]}" poster="assets/{pid}.jpg" muted playsinline '
+        src, end, a = info['src'], pid + '_end.jpg', os.path.join(self.dir, 'assets')
+        if self.blur:
+            src, end = pid + '_b.mp4', pid + '_end_b.jpg'
+            if not os.path.exists(os.path.join(a, src)):
+                media.blurred_video(os.path.join(a, info['src']), os.path.join(a, src))
+            if not os.path.exists(os.path.join(a, end)):
+                still = os.path.join(a, pid + '_end.jpg')
+                media.blurred(still, os.path.join(a, end), media.faces(still) or [])
+        return (f'<img class="{cls}" src="assets/{end}" alt=""{pos} />'
+                f'<video id="vd{self.n}" class="{cls} clip" src="assets/{src}" poster="{self._img(pid)}" muted playsinline '
                 f'data-start="{start}" data-duration="{play}" data-media-start="{off}" data-playback-rate="{rate}" '
                 f'data-track-index="{100 + self.n}"{pos}></video>')
 

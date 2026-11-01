@@ -31,7 +31,10 @@ function Node-Ok {
 Write-Host "`n=== createMovie 설치 ===`n" -ForegroundColor Green
 Refresh-Path
 
-if (-not (Python-Ok)) { Winget-Install 'Python.Python.3.12' 'Python' }
+if (-not (Python-Ok)) {
+  Winget-Install 'Python.Python.3.12' 'Python'
+  $py = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312'; if (Test-Path $py) { $env:Path = "$py;$py\Scripts;$env:Path" }
+}
 if (-not (Python-Ok)) { Fail 'Python을 찾지 못했습니다. 이 창을 닫고 새로 열어 다시 실행해 주세요.' }
 Write-Host ((python --version) + ' 확인')
 
@@ -77,15 +80,20 @@ Write-Host '바탕화면에 createMovie 바로가기를 만들었습니다.' -Fo
 if (Has 'nvidia-smi') {
   $go = $H3
   if (-not $go) {
-    $ans = Read-Host "`nNVIDIA GPU가 있습니다. AI 영상 생성 도구도 설치할까요? 약 60GB를 내려받습니다. (y/N)"
+    $ans = Read-Host "`nNVIDIA GPU가 있습니다. AI 영상 생성 도구도 설치할까요? 약 80GB를 내려받습니다. (y/N)"
     $go = $ans -eq 'y' -or $ans -eq 'Y'
   }
   if ($go) {
+    Write-Host 'GPU 안전 설정을 적용합니다. 관리자 확인 창에서 예를 눌러 주세요.' -ForegroundColor Cyan
+    $lim = (python -c "import sys;sys.path.insert(0,'studio');import engine;l=engine.gpu_limits();print(l['power'] or 0,l['clock'] or 0)") -split ' '
+    if ($lim.Count -ne 2) { $lim = 0, 0 }  # Without numbers fitted to this card, limits for another card would only fail.
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/gpu-safe.ps1 -PowerLimit $lim[0] -MaxClock $lim[1]
+    $g1 = $LASTEXITCODE
+    powershell -NoProfile -ExecutionPolicy Bypass -File tools/gpu-safe-task.ps1 -PowerLimit $lim[0] -MaxClock $lim[1]
+    if ($g1 -ne 0 -or $LASTEXITCODE -ne 0) { Write-Host 'GPU 안전 설정을 적용하지 못했습니다. 나중에 tools/gpu-safe.ps1을 직접 실행해 주세요.' -ForegroundColor Yellow }
     python tools/setup_h3.py
     if ($LASTEXITCODE -ne 0) { Fail 'AI 영상 생성 도구를 설치하지 못했습니다. 다시 실행하면 이어서 진행합니다.' }
-    Write-Host 'GPU 안전 설정을 적용합니다. 관리자 확인 창에서 예를 눌러 주세요.' -ForegroundColor Cyan
-    powershell -NoProfile -ExecutionPolicy Bypass -File tools/gpu-safe.ps1
-    powershell -NoProfile -ExecutionPolicy Bypass -File tools/gpu-safe-task.ps1
+    Write-Host 'GPU 안전 설정 일부는 재부팅 후 적용됩니다. 첫 생성 전에 PC를 재부팅해 주세요.' -ForegroundColor Cyan
   }
 } else {
   Write-Host "`nNVIDIA GPU가 없어 AI 영상 생성은 쓸 수 없습니다. 홍보 영상은 그대로 쓸 수 있습니다." -ForegroundColor Yellow

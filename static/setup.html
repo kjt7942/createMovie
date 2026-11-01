@@ -3,37 +3,78 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>설치·점검</title>
+<title>설치·점검 · createMovie</title>
+<link rel="stylesheet" href="/theme.css">
 <style>
-:root { --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --muted:#667085; --line:#dfe3ea; --accent:#3257d6; --ok:#12805c; --bad:#c62f2f; --soft:#eef1f6; }
-@media (prefers-color-scheme: dark) { :root { --bg:#14171d; --card:#1d212a; --ink:#e7eaf0; --muted:#98a2b3; --line:#323844; --accent:#7f9cff; --ok:#4cc79c; --bad:#f07878; --soft:#272c37; } }
-* { box-sizing:border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 "Malgun Gothic","Segoe UI",system-ui,sans-serif; }
-main { max-width:820px; margin:auto; padding:20px 16px; }
-h1 { font-size:22px; margin:6px 0 16px; } h2 { font-size:16px; margin:0 0 10px; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
-.t { display:flex; gap:10px; padding:7px 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
-.t b { flex:none; width:44px; font-weight:600; } .t.ok b { color:var(--ok); } .t.no b { color:var(--bad); }
-.t small { display:block; color:var(--muted); }
-code { font:13px Consolas,monospace; background:var(--soft); padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
-button { font:inherit; padding:8px 14px; border-radius:6px; border:1px solid var(--line); background:var(--soft); color:var(--ink); cursor:pointer; margin:4px 8px 4px 0; }
-button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-@media (prefers-color-scheme: dark) { button.primary { color:#10131a; } }
-.muted { color:var(--muted); font-size:14px; }
+.shell { display:block; max-width:860px; padding-bottom:28px; }
+.t { display:flex; gap:10px; padding:9px 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
+.t:first-child { border-top:0; }
+.t b { flex:none; width:44px; font-weight:600; } .t.ok b { color:var(--ok); } .t.no b { color:var(--tally); }
+.t small { display:block; color:var(--mute); }
+code { font:13px var(--mono); letter-spacing:0; background:var(--surface-2); padding:1px 5px; border-radius:4px; overflow-wrap:anywhere; }
+main button { margin:4px 8px 4px 0; }
 ol { padding-left:20px; margin:6px 0; }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+.row > label { flex:1 1 160px; margin-bottom:0; }
+.row > button { margin:0; }
+.facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:10px 0; }
+.facts div { background:var(--surface-2); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--mute); overflow-wrap:anywhere; }
+.facts b { display:block; font:600 16px var(--mono); letter-spacing:0; color:var(--ink); }
+.st { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line); }
+.st span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.st small { display:block; color:var(--mute); }
+.st button { flex:none; margin:0; height:34px; padding:0 12px; font-size:13px; }
+#stList { max-height:420px; overflow:auto; }
 </style>
 </head>
-<body>
+<body class="ui">
 <script src="/nav.js"></script>
-<main>
-  <h1>설치·점검</h1>
+<header class="top"><div class="top-in"><div class="brand">설치·점검</div></div></header>
+<main class="shell">
   <div class="card"><h2>이 PC 상태</h2><div id="items" class="muted">확인 중입니다.</div></div>
   <div class="card" id="auto" hidden>
     <h2>자동 설치</h2>
     <p class="muted">빠진 도구만 설치합니다. 새 콘솔 창이 열리고, 관리자 확인 창이 뜨면 '예'를 눌러 주세요.</p>
     <button class="primary" id="base">기본 도구 설치</button>
-    <button id="h3" hidden>AI 영상 생성 도구까지 설치 (약 60GB)</button>
+    <button id="h3" hidden>AI 영상 생성 도구까지 설치 (약 80GB)</button>
     <div id="msg" class="muted"></div>
+  </div>
+  <div class="card" id="gpuCard" hidden>
+    <h2>이 PC에 맞는 GPU 설정</h2>
+    <p class="muted">GPU가 버틸 수 있는 전력과 클럭으로 제한해야 생성 중 화면이 꺼지지 않습니다. 시험 생성으로 이 PC에서 실제로 확인하세요.</p>
+    <div class="facts" id="gpuFacts"></div>
+    <div class="row">
+      <label>전력 제한(W)<input id="gpuPower" type="number"></label>
+      <label>최대 클럭(MHz)<input id="gpuClock" type="number"></label>
+      <button id="gpuApply" class="primary">적용</button>
+      <button id="gpuSuggest">권장값으로</button>
+    </div>
+    <p class="muted">적용할 때 관리자 확인 창이 뜨면 '예'를 눌러 주세요.</p>
+    <div class="row" style="margin-top:12px">
+      <label>시험할 해상도<select id="testSize"></select></label>
+      <button id="testBtn">시험 생성 시작</button>
+    </div>
+    <div id="gpuMsg"></div>
+    <div id="testResult"></div>
+  </div>
+  <div class="card" id="saveCard" hidden>
+    <h2>완성 영상 저장 폴더</h2>
+    <p class="muted">'저장 폴더로 복사'를 누르면 여기에 <code>01_제목.mp4</code> 형식으로 저장됩니다. 바꾼 폴더는 기억합니다.</p>
+    <div class="row">
+      <label>폴더<input id="saveDir"></label>
+      <button id="savePick">찾아보기</button>
+      <button id="saveSet" class="primary">저장</button>
+      <button id="saveReset">기본값으로</button>
+    </div>
+    <div id="saveMsg"></div>
+  </div>
+  <div class="card" id="storageCard" hidden>
+    <h2>저장 공간</h2>
+    <div class="facts" id="stFacts"></div>
+    <button id="stClean">중간 파일 정리</button>
+    <p class="muted">AI 영상의 이전 버전과 임시 폴더만 지웁니다. 완성 영상과 장면 파일은 그대로입니다.</p>
+    <div id="stMsg"></div>
+    <div id="stList"></div>
   </div>
   <div class="card">
     <h2>처음 설치하는 방법</h2>
@@ -49,7 +90,7 @@ ol { padding-left:20px; margin:6px 0; }
     <h2>AI 영상 생성에 필요한 것</h2>
     <ol>
       <li>NVIDIA GPU, GPU 메모리 8GB 이상. RTX 3070 Ti 8GB에서 시험했습니다.</li>
-      <li>디스크 여유 약 60GB. 내려받는 데 네트워크 속도에 따라 몇 시간이 걸릴 수 있습니다.</li>
+      <li>디스크 여유 약 80GB. 내려받는 데 네트워크 속도에 따라 몇 시간이 걸릴 수 있습니다.</li>
       <li>GPU가 없으면 AI 영상 생성은 쓸 수 없지만 사진 홍보 영상은 그대로 쓸 수 있습니다.</li>
     </ol>
   </div>
@@ -71,6 +112,106 @@ ol { padding-left:20px; margin:6px 0; }
 </main>
 <script>
 const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const say = (box, text, kind = '') => box.replaceChildren(el('div', `msg ${kind}`, text));
+async function api(path, data) {
+  const res = await fetch(path, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).catch(() => null);
+  if (!res) throw new Error('서버에 연결할 수 없습니다.');
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `서버 오류 (${res.status})`);
+  return json;
+}
+const fact = (value, label) => { const d = el('div', '', label); d.prepend(el('b', '', value)); return d; };
+const num = (v, unit) => (v == null ? '-' : `${Math.round(v)}${unit}`);
+const gb = b => (b == null ? '-' : b >= 1e9 ? `${(b / 1e9).toFixed(1)}GB` : `${Math.round(b / 1e6)}MB`);
+const mins = s => `약 ${Math.max(1, Math.round(s / 60))}분`;
+
+let gpuWatch = 0, suggested = {};
+async function loadGpu() {
+  const g = await api('/h3/api/gpu');
+  if (!g.card) return;
+  $('gpuCard').hidden = false; suggested = g.suggested;
+  const c = g.card;
+  $('gpuFacts').replaceChildren(fact(c.name, 'GPU'), fact(num(c.mem && c.mem / 1024, 'GB'), '메모리'),
+    fact(num(g.current, 'W'), '지금 전력 제한'),
+    fact(c.power_min ? `${Math.round(c.power_min)}~${Math.round(c.power_max)}W` : '변경 불가', `허용 범위 (기본 ${num(c.power_default, 'W')})`),
+    fact(`${num(suggested.power, 'W')} · ${num(suggested.clock, 'MHz')}`, '권장값'));
+  if (document.activeElement !== $('gpuPower') && document.activeElement !== $('gpuClock')) {
+    $('gpuPower').value = g.limits.power ?? ''; $('gpuClock').value = g.limits.clock ?? '';
+  }
+  $('gpuPower').disabled = !c.power_min;
+  if (!$('testSize').options.length) $('testSize').replaceChildren(...Object.entries(g.presets).map(([v, p]) => { const o = el('option', '', `${p.label}, ${mins(g.estimates[v])}`); o.value = v; return o; }));
+  $('testBtn').disabled = g.testing || !lastH3Ok;
+  $('testBtn').textContent = g.testing ? '시험 생성 진행 중 (상단 대기열에서 확인)' : '시험 생성 시작';
+  showTest(g.test);
+  clearTimeout(gpuWatch);
+  if (g.testing) gpuWatch = setTimeout(() => loadGpu().catch(() => {}), 5000);
+}
+function showTest(t) {
+  if (!t) return $('testResult').replaceChildren();
+  const box = el('div');
+  box.append(el('h3', '', `마지막 시험 · ${new Date(t.at * 1000).toLocaleString('ko-KR')} · ${t.size} · ${num(t.power, 'W')} / ${num(t.clock, 'MHz')}`));
+  box.append(el('div', `msg ${{ ok: 'ok', warn: 'warn', bad: 'bad' }[t.level]}`, t.message));
+  const f = el('div', 'facts');
+  f.append(fact(num(t.peak_temp, '°C'), '최고 온도'), fact(num(t.peak_power, 'W'), '최고 전력'), fact(t.peak_mem == null ? '-' : `${(t.peak_mem / 1024).toFixed(1)}GB`, '최고 GPU 메모리'));
+  if (t.scene_seconds) f.append(fact(`${Math.round(t.scene_seconds / t.video_seconds)}초`, '영상 1초 생성 시간 (모델 로딩 포함)'));
+  box.append(f);
+  if (t.suggest_power) { const b = el('button', '', `제안값 ${t.suggest_power}W 입력`); b.onclick = () => { $('gpuPower').value = t.suggest_power; $('gpuPower').focus(); }; box.append(b); }
+  $('testResult').replaceChildren(box);
+}
+let lastH3Ok = false;
+$('gpuSuggest').onclick = () => { $('gpuPower').value = suggested.power ?? ''; $('gpuClock').value = suggested.clock ?? ''; };
+$('gpuApply').onclick = async () => {
+  $('gpuApply').disabled = true; say($('gpuMsg'), '적용 중입니다. 관리자 확인 창이 뜨면 \'예\'를 눌러 주세요.');
+  try { await api('/h3/api/gpu/apply', { power: $('gpuPower').value, clock: $('gpuClock').value }); say($('gpuMsg'), '적용했습니다. 이제 시험 생성으로 확인해 보세요.', 'ok'); $('gpuPower').blur(); $('gpuClock').blur(); await loadGpu(); }
+  catch (e) { say($('gpuMsg'), e.message, 'bad'); }
+  $('gpuApply').disabled = false;
+};
+$('testBtn').onclick = async () => {
+  try { await api('/h3/api/gpu/test', { size: $('testSize').value }); say($('gpuMsg'), '대기열에 넣었습니다. 끝나면 이 화면에 결과가 나옵니다.', 'ok'); await loadGpu(); }
+  catch (e) { say($('gpuMsg'), e.message, 'bad'); }
+};
+
+async function loadSave() {
+  const s = await api('/h3/api/settings');
+  $('saveCard').hidden = false; $('saveDir').value = s.export_dir; $('saveDir').placeholder = s.default_dir;
+}
+const setDir = async (path, words) => {
+  try { const r = await api('/h3/api/settings', { export_dir: path }); $('saveDir').value = r.export_dir; say($('saveMsg'), `${words}: ${r.export_dir}`, 'ok'); }
+  catch (e) { say($('saveMsg'), e.message, 'bad'); }
+};
+$('saveSet').onclick = () => setDir($('saveDir').value, '저장했습니다');
+$('saveReset').onclick = () => setDir('', '기본 폴더로 되돌렸습니다');
+$('savePick').onclick = async () => {
+  say($('saveMsg'), '폴더 선택 창을 확인하세요. 다른 창 뒤에 있을 수 있습니다.');
+  try { const { path } = await api('/h3/api/settings/pick', {}); if (path) await setDir(path, '저장했습니다'); else $('saveMsg').replaceChildren(); }
+  catch (e) { say($('saveMsg'), e.message, 'bad'); }
+};
+
+const KIND = { h3: 'AI 영상', promo: '홍보 영상' };
+async function loadStorage() {
+  const s = await api('/h3/api/storage');
+  $('storageCard').hidden = false;
+  $('stFacts').replaceChildren(fact(gb(s.items.reduce((a, x) => a + x.size, 0)), `프로젝트 ${s.items.length}개 사용`), fact(gb(s.spare), '정리할 수 있는 중간 파일'), fact(gb(s.free), '디스크 남은 공간'));
+  $('stClean').disabled = !s.spare;
+  $('stList').replaceChildren(...s.items.map(x => {
+    const row = el('div', 'st'), text = el('span');
+    text.append(el('div', '', x.title), el('small', '', `${KIND[x.kind]} · ${gb(x.size)}`));
+    const b = el('button', 'danger', '삭제'); let armed = 0;
+    b.onclick = async () => {
+      if (Date.now() - armed > 4000) { armed = Date.now(); b.textContent = '한 번 더 누르면 삭제'; setTimeout(() => { b.textContent = '삭제'; }, 4000); return; }
+      try {
+        await api(x.kind === 'h3' ? `/h3/api/projects/${x.id}/delete` : '/api/reset', x.kind === 'h3' ? {} : { job: x.id });
+        say($('stMsg'), `지웠습니다: ${x.title}`, 'ok'); await loadStorage();
+      } catch (e) { say($('stMsg'), e.message, 'bad'); }
+    };
+    row.append(text, b); return row;
+  }));
+}
+$('stClean').onclick = async () => {
+  try { const { freed } = await api('/h3/api/storage/clean', {}); say($('stMsg'), `${gb(freed)}를 정리했습니다.`, 'ok'); await loadStorage(); }
+  catch (e) { say($('stMsg'), e.message, 'bad'); }
+};
 function row(i) {
   const d = document.createElement('div'); d.className = `t ${i.ok ? 'ok' : 'no'}`;
   const b = document.createElement('b'); b.textContent = i.ok ? '정상' : '없음';
@@ -79,15 +220,22 @@ function row(i) {
   d.append(b, s); return d;
 }
 async function run(h3) {
+  $('base').disabled = $('h3').disabled = true;
   $('msg').textContent = '설치 창을 여는 중입니다.';
   const r = await fetch('/api/setup/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ h3 }) }).catch(() => null);
   $('msg').textContent = r && r.ok ? '새 콘솔 창에서 설치가 진행됩니다. 끝나면 서비스를 다시 시작하고 이 화면을 새로고침하세요.' : '설치 창을 열지 못했습니다. setup.bat을 직접 실행해 주세요.';
+  if (!r || !r.ok) $('base').disabled = $('h3').disabled = false;
 }
 (async () => {
   try {
     const s = await fetch('/api/setup/status').then(r => r.json());
     $('items').replaceChildren(...s.items.map(row));
     $('items').className = '';
+    if (s.local) {
+      lastH3Ok = s.h3.ok;
+      for (const load of [loadSave, loadStorage]) load().catch(e => console.warn(e));
+      if (s.windows && s.h3.gpu_ok) loadGpu().catch(e => say($('gpuMsg'), e.message, 'bad'));
+    }
     if (s.local && s.windows) {
       $('auto').hidden = false;
       $('h3').hidden = !s.h3.gpu_ok || s.h3.installed;

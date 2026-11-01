@@ -3,6 +3,6 @@ jobs/
 __pycache__/
 worker/config.json
 worker/server.txt
-fonts/
+/fonts/
 models/
 Wan2GP/
