@@ -11,7 +11,8 @@ import media
 HERE = os.path.dirname(os.path.abspath(__file__))
 FONTS_DIR = os.path.join(HERE, 'fonts')
 
-TRANSITIONS = ['panel', 'slide', 'fade', 'zoom', 'blur', 'wipe', 'wipe-up', 'split', 'circle', 'diagonal', 'whip', 'flash', 'spin']
+TRANSITIONS = ['panel', 'slide', 'fade', 'zoom', 'blur', 'wipe', 'wipe-up', 'split', 'circle', 'diagonal', 'whip', 'flash', 'spin',
+               'slide-up', 'slide-down', 'curtain', 'diamond', 'blinds', 'zoom-out', 'flip']
 SCENE_TYPES = ['title', 'collage', 'stat', 'quote', 'list']
 
 SANS = '"Noto Sans CJK KR", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif'
@@ -19,17 +20,31 @@ SERIF = '"Noto Serif CJK KR", "Noto Serif KR", "Batang", serif'
 STYLES = {
     'classic': {'label': '클래식', 'colors': ['#ff6b4a', '#ffc93c', '#3ddc97'], 'speed': 1.0,
                 'head': ('NotoSansKR', SANS), 'body': ('NotoSansKR', SANS),
-                'mix': ['panel', 'wipe', 'zoom', 'circle', 'whip', 'slide', 'split', 'flash', 'fade', 'diagonal', 'spin', 'wipe-up', 'blur']},
+                'mix': ['panel', 'wipe', 'zoom', 'circle', 'whip', 'slide', 'split', 'flash', 'fade', 'diagonal', 'spin', 'wipe-up', 'blur',
+                        'curtain', 'diamond', 'blinds', 'slide-up', 'flip', 'zoom-out']},
     'pop': {'label': '팝', 'colors': ['#ff5fa2', '#ffd23f', '#2ec4b6'], 'speed': 0.85,
             'head': ('Jua', SANS), 'body': ('NotoSansKR', SANS),
-            'mix': ['spin', 'circle', 'panel', 'zoom', 'flash', 'wipe-up']},
+            'mix': ['spin', 'circle', 'panel', 'zoom', 'flash', 'wipe-up', 'diamond', 'zoom-out', 'flip', 'slide-up']},
     'cinematic': {'label': '시네마틱', 'colors': ['#d9b26f', '#e9d8b4', '#b98b5c'], 'speed': 1.6,
                   'head': ('NotoSerifKR', SERIF), 'body': ('NotoSerifKR', SERIF),
-                  'mix': ['fade', 'blur', 'wipe', 'split', 'fade', 'zoom']},
+                  'mix': ['fade', 'blur', 'wipe', 'split', 'fade', 'zoom', 'curtain', 'zoom-out']},
     'kinetic': {'label': '키네틱', 'colors': ['#ff2e4d', '#ffe600', '#00e0ff'], 'speed': 0.6,
                 'head': ('BlackHanSans', SANS), 'body': ('NotoSansKR', SANS),
-                'mix': ['whip', 'flash', 'diagonal', 'slide', 'wipe-up', 'split']},
+                'mix': ['whip', 'flash', 'diagonal', 'slide', 'wipe-up', 'split', 'blinds', 'slide-up', 'slide-down']},
 }
+# 오프닝·엔딩 배치. plan['opening'] / plan['ending']에 지정, 없으면(자동) seed로 영상마다 다르게 고른다.
+LAYOUTS = ['center', 'split', 'poster', 'card', 'polaroid', 'circle', 'band', 'solid']
+LAYOUT_NAMES = {'center': '가운데', 'split': '분할', 'poster': '포스터', 'card': '카드',
+                'polaroid': '폴라로이드', 'circle': '원형', 'band': '띠', 'solid': '단색'}
+
+
+def layout_of(p, which):
+    v = p.get(which)
+    if v in LAYOUTS:
+        return v
+    return LAYOUTS[(int(p.get('seed') or 0) + (0 if which == 'opening' else 2)) % len(LAYOUTS)]
+
+
 STYLE_HINT = ('classic(기본, 무난한 소개), pop(아이·가족·축제·놀이처럼 밝고 귀여운 주제), '
               'cinematic(기념·감동·회고·공식 행사처럼 차분하고 진지한 주제), kinetic(스포츠·공연·홍보처럼 빠르고 강렬한 주제)')
 
@@ -45,12 +60,21 @@ TIMELINE_JS = '''<script>
       const CLIP = {
         wipe: ["inset(0 0 0 100%)", "inset(0 0 0 0%)"], "wipe-up": ["inset(100% 0 0 0)", "inset(0% 0 0 0)"],
         split: ["inset(0 50% 0 50%)", "inset(0 0% 0 0%)"], circle: ["circle(0% at 50% 50%)", "circle(150% at 50% 50%)"],
-        diagonal: ["polygon(0% 0%, 0% 0%, -50% 100%, -50% 100%)", "polygon(0% 0%, 150% 0%, 100% 100%, -50% 100%)"] };
+        diagonal: ["polygon(0% 0%, 0% 0%, -50% 100%, -50% 100%)", "polygon(0% 0%, 150% 0%, 100% 100%, -50% 100%)"],
+        curtain: ["inset(50% 0 50% 0)", "inset(0% 0 0% 0)"],
+        diamond: ["polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%)", "polygon(50% -50%, 150% 50%, 50% 150%, -50% 50%)"] };
+      // 블라인드: 세로 띠 5개가 동시에 넓어진다(점 개수가 같은 다각형끼리 보간)
+      const BL = w => { const p = []; for (let k = 0; k < 5; k++) { const a = 20 * k; if (k) p.push(a + "% 100%"); p.push(a + "% 0%", (a + w) + "% 0%", (a + w) + "% 100%"); } p.push("0% 100%"); return "polygon(" + p.join(", ") + ")"; };
+      CLIP.blinds = [BL(0), BL(20)];
       function trans(kind, el, s, i) {
         const D = x => x * SP;
         if (kind === "panel") F(["#p_a", "#p_b", "#p_c"][i % 3], { x: "-100%" }, { x: "100%", duration: D(0.9), ease: "power2.inOut" }, s - D(0.35));
         else if (CLIP[kind]) F(el, { clipPath: CLIP[kind][0] }, { clipPath: CLIP[kind][1], duration: D(0.85), ease: "power3.inOut" }, s);
         else if (kind === "slide") F(el, { xPercent: 100 }, { xPercent: 0, duration: D(0.8), ease: "power3.inOut" }, s);
+        else if (kind === "slide-up") F(el, { yPercent: 100 }, { yPercent: 0, duration: D(0.8), ease: "power3.inOut" }, s);
+        else if (kind === "slide-down") F(el, { yPercent: -100 }, { yPercent: 0, duration: D(0.8), ease: "power3.inOut" }, s);
+        else if (kind === "zoom-out") F(el, { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: D(0.8), ease: "power3.out" }, s);
+        else if (kind === "flip") F(el, { opacity: 0, rotationY: 90, transformPerspective: 1600 }, { opacity: 1, rotationY: 0, duration: D(0.8), ease: "power3.out" }, s);
         else if (kind === "zoom") F(el, { opacity: 0, scale: 1.25 }, { opacity: 1, scale: 1, duration: D(0.9), ease: "power3.out" }, s);
         else if (kind === "blur") F(el, { opacity: 0, filter: "blur(40px)" }, { opacity: 1, filter: "blur(0px)", duration: D(0.9), ease: "power2.out" }, s);
         else if (kind === "whip") F(el, { xPercent: 100, filter: "blur(24px)" }, { xPercent: 0, filter: "blur(0px)", duration: D(0.5), ease: "expo.out" }, s);
@@ -104,6 +128,7 @@ TIMELINE_JS = '''<script>
       tl.to("#b1", { x: 40, y: 30, duration: 4, ease: "sine.inOut" }, 1);
       body("#intro .ilogo", 0.1 * K); body("#yr", 0.3 * K); head("#big", 0.5 * K); body("#hanja", 1.2 * K); body("#org", 1.6 * K);
       tl.to("#intro .photo", { scale: 1.08, duration: starts[0] + 0.8, ease: "none" }, 0);
+      F("#iacc", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 0.05);
 
       starts.forEach((s, i) => {
         const id = "#s" + (i + 1), T = TYPES[i], at = x => s + x * K, d = durs[i];
@@ -145,6 +170,7 @@ TIMELINE_JS = '''<script>
       F("#ob2", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.6);
       head("#o1", os + 0.7 * K); head("#o2", os + 1.0 * K); body("#o3", os + 1.6 * K); body("#outro .ologo", os + 2.0 * K);
       tl.to("#outro .photo", { scale: 1.08, duration: total - os, ease: "none" }, os);
+      F("#oacc", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, os + 0.3);
       tl.to("#root", { opacity: 0, duration: 0.5, ease: "power1.in" }, total - 0.5);
       F("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
 
@@ -396,6 +422,197 @@ STYLE_PCSS = {
 }
 
 
+# ---------------------------------------------------------------- 오프닝·엔딩 배치(center는 기본 CSS 그대로)
+LAYOUT_CSS = '''<style>
+      .acc { display: none; position: absolute; }
+      #root .scene:not(.lay-center) .blob { display: none; }
+      #root .scene:not(.lay-center) .acc { display: block; }
+      #root .lay-polaroid .acc, #root .lay-circle .acc { display: none; }
+      /* 분할: 한쪽 색 면에 글자, 다른 쪽 선명한 사진 */
+      #root #intro.lay-split, #root #outro.lay-split { background: var(--ground); }
+      #root .lay-split .photo { inset: auto; top: 0; width: 54%; height: 100%; opacity: 1; filter: none; }
+      #root #intro.lay-split .photo { left: 46%; }
+      #root #outro.lay-split .photo { left: 0; }
+      #root .lay-split .acc { top: 0; bottom: 0; width: 16px; background: var(--coral); transform-origin: 50% 0; }
+      #root #intro.lay-split .acc { left: 46%; }
+      #root #outro.lay-split .acc { left: 54%; }
+      #root #intro.lay-split .yr, #root #intro.lay-split .big, #root #intro.lay-split .hanja, #root #intro.lay-split .org { left: 110px; width: 740px; padding: 0; text-align: left; }
+      #root #intro.lay-split .yr { top: 260px; font-size: 52px; letter-spacing: .3em; }
+      #root #intro.lay-split .big { top: 340px; }
+      #root #intro.lay-split .hanja { top: 580px; font-size: 44px; letter-spacing: .04em; line-height: 1.45; }
+      #root #intro.lay-split .org { top: 820px; font-size: 48px; }
+      #root #intro.lay-split .ilogo { left: 110px; right: auto; margin: 0; top: 110px; height: 100px; }
+      #root #outro.lay-split .o1, #root #outro.lay-split .o2, #root #outro.lay-split .o3 { left: 1150px; width: 690px; padding: 0; text-align: left; }
+      #root #outro.lay-split .o1 { top: 300px; font-size: 84px; }
+      #root #outro.lay-split .o2 { top: 430px; font-size: 84px; }
+      #root #outro.lay-split .o3 { top: 640px; font-size: 42px; line-height: 1.5; }
+      #root #outro.lay-split .ologo { left: 1150px; right: auto; margin: 0; top: 850px; height: 90px; }
+      /* 포스터: 선명한 사진 전체 + 아래 어둠, 글자는 왼쪽 아래 */
+      #root .lay-poster .photo { opacity: 1; filter: none; }
+      #root .lay-poster .acc { inset: 0; background: linear-gradient(0deg, rgba(10,10,15,.92) 0%, rgba(10,10,15,.6) 38%, rgba(10,10,15,0) 68%), linear-gradient(180deg, rgba(10,10,15,.5) 0%, rgba(10,10,15,0) 22%); }
+      #root #intro.lay-poster .yr, #root #intro.lay-poster .big, #root #intro.lay-poster .hanja { left: 110px; width: 1600px; padding: 0; text-align: left; }
+      #root #intro.lay-poster .yr { top: 560px; width: auto; font-size: 40px; letter-spacing: .25em; padding: 6px 12px 6px 24px; background: var(--coral); color: #fff; border-radius: 8px; }
+      #root #intro.lay-poster .big { top: 640px; }
+      #root #intro.lay-poster .hanja { top: 880px; font-size: 44px; letter-spacing: .04em; }
+      #root #intro.lay-poster .org { left: auto; right: 110px; width: auto; padding: 0; top: 90px; font-size: 40px; text-align: right; }
+      #root #intro.lay-poster .ilogo { left: 110px; right: auto; margin: 0; top: 80px; height: 90px; }
+      #root #outro.lay-poster .o1, #root #outro.lay-poster .o2, #root #outro.lay-poster .o3 { left: 110px; width: 1600px; padding: 0; text-align: left; }
+      #root #outro.lay-poster .o1 { top: 580px; font-size: 100px; }
+      #root #outro.lay-poster .o2 { top: 720px; font-size: 100px; }
+      #root #outro.lay-poster .o3 { top: 890px; font-size: 42px; }
+      #root #outro.lay-poster .ologo { left: 110px; right: auto; margin: 0; top: 120px; height: 90px; }
+      /* 카드: 흐린 사진 위 가운데 밝은 카드에 어두운 글자 */
+      #root .lay-card .photo { opacity: 1; filter: blur(8px) brightness(.62); }
+      #root .lay-card .acc { left: 50%; top: 50%; width: 1240px; height: 640px; margin: -320px 0 0 -620px; background: rgba(255,255,255,.95); border-radius: 36px; box-shadow: 0 40px 80px rgba(0,0,0,.35); }
+      #root .lay-card .yr { top: 270px; font-size: 48px; letter-spacing: .3em; color: var(--coral); }
+      #root .lay-card .big, #root .lay-card .o1 { color: #1b1a24; text-shadow: none; }
+      #root .lay-card .big { top: 340px; }
+      #root .lay-card .big .o, #root .lay-card .o2, #root .lay-card .org b { color: var(--coral); text-shadow: none; }
+      #root .lay-card .hanja { top: 590px; font-size: 44px; letter-spacing: .08em; color: #464c57; padding: 0 380px; }
+      #root .lay-card .org { top: 720px; font-size: 46px; color: #1b1a24; }
+      #root .lay-card .ilogo { top: 80px; height: 110px; }
+      #root .lay-card .o1 { top: 300px; font-size: 96px; }
+      #root .lay-card .o2 { top: 430px; font-size: 96px; }
+      #root .lay-card .o3 { top: 620px; font-size: 42px; color: #464c57; padding: 0 380px; line-height: 1.45; }
+      #root .lay-card .ologo { top: 740px; height: 80px; }
+      /* 폴라로이드: 흰 테두리 사진을 비스듬히, 반대쪽에 글자 */
+      #root .lay-polaroid .photo { inset: auto; opacity: 1; filter: none; border: 22px solid #fff; border-bottom-width: 90px; box-shadow: 0 40px 70px rgba(0,0,0,.45); }
+      #root #intro.lay-polaroid .photo { left: 1040px; top: 150px; width: 740px; height: 560px; rotate: 4deg; }
+      #root #outro.lay-polaroid .photo { left: 140px; top: 160px; width: 740px; height: 560px; rotate: -4deg; }
+      #root #intro.lay-polaroid .yr, #root #intro.lay-polaroid .big, #root #intro.lay-polaroid .hanja, #root #intro.lay-polaroid .org { left: 110px; width: 820px; padding: 0; text-align: left; }
+      #root #intro.lay-polaroid .yr { top: 260px; font-size: 52px; letter-spacing: .3em; }
+      #root #intro.lay-polaroid .big { top: 340px; }
+      #root #intro.lay-polaroid .hanja { top: 580px; font-size: 44px; letter-spacing: .04em; line-height: 1.45; }
+      #root #intro.lay-polaroid .org { top: 820px; font-size: 48px; }
+      #root #intro.lay-polaroid .ilogo { left: 110px; right: auto; margin: 0; top: 110px; height: 100px; }
+      #root #outro.lay-polaroid .o1, #root #outro.lay-polaroid .o2, #root #outro.lay-polaroid .o3 { left: 1060px; width: 760px; padding: 0; text-align: left; }
+      #root #outro.lay-polaroid .o1 { top: 300px; font-size: 88px; }
+      #root #outro.lay-polaroid .o2 { top: 430px; font-size: 88px; }
+      #root #outro.lay-polaroid .o3 { top: 640px; font-size: 42px; line-height: 1.5; }
+      #root #outro.lay-polaroid .ologo { left: 1060px; right: auto; margin: 0; top: 850px; height: 90px; }
+      /* 원형: 둥근 사진 아래에 가운데 정렬 글자 */
+      #root .lay-circle .photo { inset: auto; left: 50%; top: 90px; width: 480px; height: 480px; margin-left: -252px; border-radius: 50%; border: 12px solid var(--coral); opacity: 1; filter: none; }
+      #root .lay-circle .yr { top: 620px; font-size: 36px; letter-spacing: .4em; }
+      #root .lay-circle .big { top: 670px; }
+      #root .lay-circle .hanja { top: 840px; font-size: 42px; letter-spacing: .1em; }
+      #root .lay-circle .org { top: 940px; font-size: 40px; }
+      #root .lay-circle .ilogo, #root .lay-circle .ologo { left: 110px; right: auto; margin: 0; top: 80px; height: 80px; }
+      #root .lay-circle .o1 { top: 640px; font-size: 80px; }
+      #root .lay-circle .o2 { top: 750px; font-size: 80px; }
+      #root .lay-circle .o3 { top: 890px; font-size: 40px; }
+      /* 띠: 선명한 사진 위 비스듬한 색 띠에 글자 */
+      #root .lay-band .photo { opacity: 1; filter: brightness(.78); }
+      #root .lay-band .acc { left: -10%; width: 120%; top: 50%; height: 380px; margin-top: -190px; background: var(--coral); opacity: .93; rotate: -6deg; box-shadow: 0 30px 60px rgba(0,0,0,.3); }
+      #root .lay-band .yr { top: 250px; width: auto; left: 50%; translate: -50% 0; padding: 6px 12px 6px 30px; font-size: 40px; background: rgba(15,12,25,.75); border-radius: 8px; }
+      #root .lay-band .big, #root .lay-band .hanja, #root .lay-band .o1, #root .lay-band .o2, #root .lay-band .o3 { rotate: -6deg; }
+      #root .lay-band .big { top: 400px; color: #fff; text-shadow: 0 6px 0 rgba(0,0,0,.18); }
+      #root .lay-band .big .o, #root .lay-band .o2 { color: var(--ground); text-shadow: none; }
+      #root .lay-band .hanja { top: 610px; font-size: 44px; letter-spacing: .08em; color: #fff; }
+      #root .lay-band .org { top: 900px; font-size: 44px; text-shadow: 0 4px 20px rgba(0,0,0,.6); }
+      #root .lay-band .o1 { top: 380px; font-size: 92px; }
+      #root .lay-band .o2 { top: 500px; font-size: 92px; }
+      #root .lay-band .o3 { top: 650px; font-size: 42px; color: #fff; }
+      #root .lay-band .ologo { top: 870px; height: 90px; }
+      /* 단색: 사진 없이 큰 글자만(타이포그래피) */
+      #root #intro.lay-solid, #root #outro.lay-solid { background: var(--coral); }
+      #root .lay-solid .photo { display: none; }
+      #root .lay-solid .acc { right: -160px; bottom: -160px; width: 620px; height: 620px; border-radius: 50%; border: 70px solid rgba(255,255,255,.22); }
+      #root .lay-solid .yr, #root .lay-solid .big, #root .lay-solid .hanja, #root .lay-solid .org, #root .lay-solid .o1, #root .lay-solid .o2, #root .lay-solid .o3 { left: 110px; width: 1500px; padding: 0; text-align: left; }
+      #root .lay-solid .yr { top: 220px; font-size: 52px; letter-spacing: .3em; color: var(--ground); }
+      #root .lay-solid .big { top: 300px; color: #fff; text-shadow: none; }
+      #root .lay-solid .big .o, #root .lay-solid .o2, #root .lay-solid .org b { color: var(--ground); text-shadow: none; }
+      #root .lay-solid .hanja { top: 640px; font-size: 48px; letter-spacing: .04em; color: rgba(255,255,255,.92); }
+      #root .lay-solid .org { top: 860px; font-size: 48px; }
+      #root .lay-solid .ilogo, #root .lay-solid .ologo { left: auto; right: 110px; margin: 0; top: 100px; height: 100px; }
+      #root .lay-solid .o1 { top: 330px; font-size: 110px; }
+      #root .lay-solid .o2 { top: 470px; font-size: 110px; }
+      #root .lay-solid .o3 { top: 680px; font-size: 46px; color: rgba(255,255,255,.92); }
+    </style>'''
+LAYOUT_PCSS = '''<style>
+      #root .lay-split .photo { left: 0; width: 100%; height: 52%; }
+      #root #intro.lay-split .photo { left: 0; top: 0; }
+      #root #outro.lay-split .photo { top: 48%; }
+      #root .lay-split .acc { left: 0; right: 0; bottom: auto; width: auto; height: 16px; transform-origin: 0 50%; }
+      #root #intro.lay-split .acc { left: 0; top: 52%; }
+      #root #outro.lay-split .acc { left: 0; top: 48%; }
+      #root #intro.lay-split .yr, #root #intro.lay-split .big, #root #intro.lay-split .hanja, #root #intro.lay-split .org { left: 80px; width: 920px; }
+      #root #intro.lay-split .yr { top: 1080px; }
+      #root #intro.lay-split .big { top: 1160px; }
+      #root #intro.lay-split .hanja { top: 1420px; font-size: 42px; }
+      #root #intro.lay-split .org { top: 1640px; font-size: 46px; }
+      #root #intro.lay-split .ilogo { left: auto; right: 80px; top: 1070px; height: 80px; }
+      #root #outro.lay-split .o1, #root #outro.lay-split .o2, #root #outro.lay-split .o3 { left: 80px; width: 920px; }
+      #root #outro.lay-split .o1 { top: 330px; font-size: 80px; }
+      #root #outro.lay-split .o2 { top: 450px; font-size: 80px; }
+      #root #outro.lay-split .o3 { top: 620px; font-size: 42px; }
+      #root #outro.lay-split .ologo { left: 80px; top: 140px; height: 90px; }
+      #root #intro.lay-poster .yr, #root #intro.lay-poster .big, #root #intro.lay-poster .hanja { left: 80px; width: 920px; }
+      #root #intro.lay-poster .yr { top: 1180px; width: auto; }
+      #root #intro.lay-poster .big { top: 1260px; }
+      #root #intro.lay-poster .hanja { top: 1540px; font-size: 42px; line-height: 1.45; }
+      #root #intro.lay-poster .org { right: 80px; top: 110px; }
+      #root #intro.lay-poster .ilogo { left: 80px; top: 100px; }
+      #root #outro.lay-poster .o1, #root #outro.lay-poster .o2, #root #outro.lay-poster .o3 { left: 80px; width: 920px; }
+      #root #outro.lay-poster .o1 { top: 1180px; font-size: 84px; }
+      #root #outro.lay-poster .o2 { top: 1300px; font-size: 84px; }
+      #root #outro.lay-poster .o3 { top: 1460px; font-size: 42px; line-height: 1.45; }
+      #root #outro.lay-poster .ologo { left: 80px; top: 140px; }
+      #root .lay-card .acc { width: 960px; height: 900px; margin: -450px 0 0 -480px; }
+      #root .lay-card .yr { top: 600px; }
+      #root .lay-card .big { top: 680px; }
+      #root .lay-card .hanja { top: 1000px; font-size: 40px; padding: 0 130px; line-height: 1.45; }
+      #root .lay-card .org { top: 1240px; }
+      #root .lay-card .ilogo { top: 330px; }
+      #root .lay-card .o1 { top: 700px; font-size: 76px; }
+      #root .lay-card .o2 { top: 810px; font-size: 76px; }
+      #root .lay-card .o3 { top: 1000px; font-size: 40px; padding: 0 130px; }
+      #root .lay-card .ologo { top: 1220px; height: 90px; }
+      #root #intro.lay-polaroid .photo { left: 140px; top: 200px; width: 760px; height: 640px; rotate: 3deg; }
+      #root #outro.lay-polaroid .photo { left: 160px; top: 860px; width: 720px; height: 600px; rotate: -3deg; }
+      #root #intro.lay-polaroid .yr, #root #intro.lay-polaroid .big, #root #intro.lay-polaroid .hanja, #root #intro.lay-polaroid .org { left: 80px; width: 920px; }
+      #root #intro.lay-polaroid .yr { top: 1080px; }
+      #root #intro.lay-polaroid .big { top: 1160px; }
+      #root #intro.lay-polaroid .hanja { top: 1420px; font-size: 42px; }
+      #root #intro.lay-polaroid .org { top: 1640px; font-size: 46px; }
+      #root #intro.lay-polaroid .ilogo { left: auto; right: 80px; top: 1070px; height: 80px; }
+      #root #outro.lay-polaroid .o1, #root #outro.lay-polaroid .o2, #root #outro.lay-polaroid .o3 { left: 80px; width: 920px; }
+      #root #outro.lay-polaroid .o1 { top: 330px; font-size: 80px; }
+      #root #outro.lay-polaroid .o2 { top: 450px; font-size: 80px; }
+      #root #outro.lay-polaroid .o3 { top: 620px; font-size: 42px; }
+      #root #outro.lay-polaroid .ologo { left: 80px; top: 140px; height: 90px; }
+      #root .lay-circle .photo { top: 360px; width: 700px; height: 700px; margin-left: -362px; }
+      #root .lay-circle .yr { top: 1140px; font-size: 44px; }
+      #root .lay-circle .big { top: 1210px; }
+      #root .lay-circle .hanja { top: 1440px; padding: 0 80px; line-height: 1.45; }
+      #root .lay-circle .org { top: 1640px; font-size: 46px; }
+      #root .lay-circle .ilogo, #root .lay-circle .ologo { left: 0; right: 0; margin: 0 auto; top: 150px; height: 100px; }
+      #root .lay-circle .o1 { top: 1160px; font-size: 76px; }
+      #root .lay-circle .o2 { top: 1270px; font-size: 76px; }
+      #root .lay-circle .o3 { top: 1420px; padding: 0 80px; line-height: 1.45; }
+      #root .lay-band .acc { left: -30%; width: 160%; height: 640px; margin-top: -320px; rotate: -8deg; }
+      #root .lay-band .big, #root .lay-band .hanja, #root .lay-band .o1, #root .lay-band .o2, #root .lay-band .o3 { rotate: -8deg; }
+      #root .lay-band .yr { top: 560px; }
+      #root .lay-band .big { top: 800px; }
+      #root .lay-band .hanja { top: 1030px; padding: 0 100px; line-height: 1.45; }
+      #root .lay-band .org { top: 1600px; }
+      #root .lay-band .o1 { top: 760px; font-size: 80px; }
+      #root .lay-band .o2 { top: 880px; font-size: 80px; }
+      #root .lay-band .o3 { top: 1040px; padding: 0 100px; line-height: 1.45; }
+      #root .lay-band .ologo { top: 1500px; }
+      #root .lay-solid .acc { right: -220px; bottom: -220px; width: 820px; height: 820px; }
+      #root .lay-solid .yr, #root .lay-solid .big, #root .lay-solid .hanja, #root .lay-solid .org, #root .lay-solid .o1, #root .lay-solid .o2, #root .lay-solid .o3 { left: 80px; width: 920px; }
+      #root .lay-solid .yr { top: 420px; }
+      #root .lay-solid .big { top: 520px; }
+      #root .lay-solid .hanja { top: 900px; font-size: 44px; line-height: 1.45; }
+      #root .lay-solid .org { top: 1600px; }
+      #root .lay-solid .ilogo, #root .lay-solid .ologo { left: 80px; right: auto; top: 1500px; height: 90px; }
+      #root #intro.lay-solid .ilogo { top: 1720px; }
+      #root .lay-solid .o1 { top: 640px; font-size: 96px; }
+      #root .lay-solid .o2 { top: 770px; font-size: 96px; }
+      #root .lay-solid .o3 { top: 960px; font-size: 44px; line-height: 1.45; }
+    </style>'''
+
+
 # ---------------------------------------------------------------- 자막·로고
 DISC_CSS = '''<style>
       .disc { position: absolute; left: 0; right: 0; top: 34px; text-align: center; z-index: 59; pointer-events: none; }
@@ -480,7 +697,8 @@ def scene_html(i, s, tag, start, dur, colors, seed, M):
         n = max(2, len(ps))
         tiles = ''.join(f'<div class="tile">{M.tag(p, "m", start, dur, M.tile_box(n, k, v))}</div>' for k, p in enumerate(ps))
         bg = M.tag(ps[0], 'photo bgp', None, None, None) if v else ''
-        body = f'{bg}<div class="grid g{n}{" poly" if v else ""}">{tiles}</div>{ttl}{sub}<div class="cbar"></div>'
+        cbar = '<div class="cbar"></div>' if s.get('cbar', True) is not False else ''   # 장면 길이만큼 차오르는 하단 막대(장면마다, 기본 켬)
+        body = f'{bg}<div class="grid g{n}{" poly" if v else ""}">{tiles}</div>{ttl}{sub}{cbar}'
     elif t == 'stat':
         body = (f'{img}<div class="dim"></div><div class="stat-l">{e(s["ttl"])}</div>'
                 f'<div class="stat-n">{digits_html(s["num"])}<span class="unit">{e(s.get("unit", ""))}</span></div>'
@@ -633,10 +851,21 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     css = '\n    '.join([re.search(r'<style>.*?</style>', base, re.S).group(0), COMMON_CSS, SCENE_CSS, VARIANT_CSS, STYLE_CSS[style]]
                        + ([PORTRAIT_CSS, PORTRAIT_SCENE_CSS, PORTRAIT_VARIANT_CSS, STYLE_PCSS.get(style, '')] if portrait else [])
                        + [font_css(job_dir, style, p, captions)]
+                       + [LAYOUT_CSS, LAYOUT_PCSS if portrait else '']
                        + [CAPTION_CSS, CAPTION_PCSS if portrait else ''] * bool(captions) + [LOGO_CSS, LOGO_PCSS if portrait else ''] * bool(logo) + [DISC_CSS] * bool(disclaimer_text(p)))
     M = Media(job_dir, photos, blur, portrait)
     tl_ = max(1, len(p['title']))
-    big_fs = min(190, int(940 / tl_)) if portrait else (230 if tl_ <= 8 else 170)
+    lay_i, lay_o = layout_of(p, 'opening'), layout_of(p, 'ending')
+    big_fs = {   # 배치마다 글자가 들어갈 너비가 달라 제목이 한 줄에 들어가게 맞춘다
+        'center': min(190, int(940 / tl_)) if portrait else (230 if tl_ <= 8 else 170),
+        'split': min(170, int(900 / tl_)) if portrait else min(150, int(720 / tl_)),
+        'poster': min(190, int(900 / tl_)) if portrait else min(200, int(1500 / tl_)),
+        'card': min(160, int(820 / tl_)) if portrait else min(190, int(1100 / tl_)),
+        'polaroid': min(150, int(880 / tl_)) if portrait else min(150, int(760 / tl_)),
+        'circle': min(150, int(900 / tl_)) if portrait else min(130, int(1500 / tl_)),
+        'band': min(160, int(900 / tl_)) if portrait else min(170, int(1500 / tl_)),
+        'solid': min(200, int(900 / tl_)) if portrait else min(220, int(1500 / tl_)),
+    }[lay_i]
     n = len(p['scenes'])
     starts, os_ = timing or beats.snap_times(length, n)
     nexts = starts[1:] + [os_]
@@ -658,8 +887,8 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     disc = (f'\n      <div class="disc clip" id="disc" data-start="{os_}" data-duration="{round(total - os_, 2)}" data-track-index="39">'
             f'<span>{e(disc)}</span></div>') if disc else ''
     body = f'''
-      <div id="intro" class="scene clip" data-start="0" data-duration="{round(starts[0] + 0.8, 2)}" data-track-index="0">
-        {M.tag(p['intro_photo'], 'photo', 0, round(starts[0] + 0.8, 2), full)}{ilogo}
+      <div id="intro" class="scene clip lay-{lay_i}" data-start="0" data-duration="{round(starts[0] + 0.8, 2)}" data-track-index="0">
+        {M.tag(p['intro_photo'], 'photo', 0, round(starts[0] + 0.8, 2), full)}<div class="acc" id="iacc"></div>{ilogo}
         <div class="blob" id="b1" style="width:620px;height:620px;left:-160px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="b2" style="width:380px;height:380px;right:-90px;bottom:-110px;background:var(--sun);opacity:.95"></div>
         <div class="blob" id="b3" style="width:160px;height:160px;right:300px;top:90px;background:var(--mint);opacity:.9"></div>
@@ -668,8 +897,8 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
         <div class="hanja" id="hanja">{e(p['tagline'])}</div>
         <div class="org" id="org"><b>{org}</b></div>
       </div>{scenes}
-      <div id="outro" class="scene clip" data-start="{os_}" data-duration="{round(total - os_, 2)}" data-track-index="2">
-        {M.tag(p['outro_photo'], 'photo', os_, round(total - os_, 2), full)}{ologo}
+      <div id="outro" class="scene clip lay-{lay_o}" data-start="{os_}" data-duration="{round(total - os_, 2)}" data-track-index="2">
+        {M.tag(p['outro_photo'], 'photo', os_, round(total - os_, 2), full)}<div class="acc" id="oacc"></div>{ologo}
         <div class="blob" id="ob1" style="width:520px;height:520px;right:-120px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="ob2" style="width:300px;height:300px;left:-80px;bottom:-90px;background:var(--mint);opacity:.9"></div>
         <div class="o1" id="o1">{split_text(o[0])}</div><div class="o2" id="o2">{split_text(o[1])}</div><div class="o3" id="o3">{e(o[2])}</div>
@@ -678,7 +907,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
       <div class="panel" id="p_b" style="background:var(--sun)"></div>
       <div class="panel" id="p_c" style="background:var(--mint)"></div>
       <div id="flash"></div><div class="lb top"></div><div class="lb bot"></div>
-      <div id="progress"></div>{caps}{disc}{audio_html}'''
+      {'<div id="progress"></div>' if p.get('progress') else ''}{caps}{disc}{audio_html}'''
     glob = p.get('transition') or 'mix'
     mix = st['mix']
     pick = lambda i, v: v if v in TRANSITIONS else glob if glob in TRANSITIONS else mix[(i + seed) % len(mix)]

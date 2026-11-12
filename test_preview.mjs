@@ -5,7 +5,7 @@ import fs from 'fs';
 const require = createRequire(import.meta.url);
 const puppeteer = require(process.env.LOCALAPPDATA + '/npm-cache/_npx/702923228c2ce1e6/node_modules/puppeteer-core');
 const CHROME = process.env.USERPROFILE + '/.cache/hyperframes/chrome/chrome-headless-shell/win64-152.0.7977.30/chrome-headless-shell-win64/chrome-headless-shell.exe';
-const job = process.argv[2], base = 'http://localhost:5000';
+const job = process.argv[2], base = 'http://localhost:5100';
 const plan = JSON.parse(fs.readFileSync(`jobs/${job}/plan.json`, 'utf8'));
 const r = await (await fetch(base + '/api/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job, plan, length: 20 }) })).json();
 if (!r.url) throw new Error(JSON.stringify(r));

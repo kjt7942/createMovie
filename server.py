@@ -1,5 +1,5 @@
 """홍보영상 제작 웹앱. 업로드(폴더 포함) -> Gemini가 장면/사진 배정 -> HyperFrames 렌더.
-실행: GEMINI_API_KEY 환경변수(또는 이 폴더의 .env)를 준비하고 `python server.py` -> http://localhost:5000
+실행: GEMINI_API_KEY 환경변수(또는 이 폴더의 .env)를 준비하고 `python server.py` -> http://localhost:5100
 WORKER_TOKEN을 설정하면 렌더링을 이 서버에서 하지 않고 대기열에 넣어 두고, PC의 렌더 워커(worker/)가 가져가 처리한다.
 이 PC에서 하는 작업(홍보 영상 렌더, /h3의 AI 영상 생성)은 studio.engine.Runner의 대기열 하나로 차례대로 처리한다."""
 import base64, collections, hmac, html, itertools, json, os, random, re, shutil, subprocess, threading, time, urllib.error, urllib.parse, urllib.request, uuid, webbrowser
@@ -96,7 +96,9 @@ def upload():
             ext = os.path.splitext(path)[1].lower()
             if ext in ('.jpg', '.jpeg', '.png', '.webp'):
                 try:
-                    im = ImageOps.exif_transpose(Image.open(f.stream)).convert('RGB')
+                    src = Image.open(f.stream)
+                    taken = media.photo_taken(src)   # 저장본에는 EXIF가 빠지므로 원본에서 먼저 읽는다
+                    im = ImageOps.exif_transpose(src).convert('RGB')
                 except Exception:
                     skipped.append(path); continue
                 pid = f'p{len(m["photos"]) + 1:03d}'
@@ -104,7 +106,8 @@ def upload():
                 ar = round(im.width / im.height, 4)
                 im.thumbnail((384, 384)); im.save(os.path.join(d, 'thumbs', pid + '.jpg'), quality=75)
                 parts = path.split('/')
-                m['photos'].append(analyze_photo(d, {'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else '', 'ar': ar}))
+                m['photos'].append(analyze_photo(d, {'id': pid, 'path': path, 'folder': parts[-2] if len(parts) > 1 else '', 'ar': ar,
+                                                     **({'taken': taken} if taken else {})}))
             elif ext in media.VIDEO_EXT:
                 if not add_video(d, m, path, ext, f.save):
                     skipped.append(path)
@@ -134,8 +137,10 @@ def add_video(d, m, path, ext, save):
     except Exception:
         os.remove(src); return False
     parts = path.split('/')
+    taken = media.video_taken(src)
     m['photos'].append(analyze_photo(d, {'id': vid, 'kind': 'video', 'src': vid + ext, 'dur': round(dur, 2), 'path': path,
-                                         'folder': parts[-2] if len(parts) > 1 else '', 'ar': round(vw / vh, 4)}))
+                                         'folder': parts[-2] if len(parts) > 1 else '', 'ar': round(vw / vh, 4),
+                                         **({'taken': taken} if taken else {})}))
     return True
 
 
@@ -200,14 +205,15 @@ def logo():
                 os.remove(dst)
             m.pop('logo', None)
         else:
-            f = request.files.get('file')
+            use_default = bool(request.form.get('default'))   # 문경시가족센터 기본 로고(static/default_logo.png)
+            f = os.path.join(HERE, 'static', 'default_logo.png') if use_default else request.files.get('file')
             if not f:
                 return jsonify(error='로고 파일이 없습니다.'), 400
             try:
-                w, h = media.clean_logo(f.stream, dst)
+                w, h = media.clean_logo(f if use_default else f.stream, dst)
             except Exception:
                 return jsonify(error='이미지를 읽지 못했습니다. PNG나 JPG로 올려 주세요.'), 400
-            m['logo'] = {'w': w, 'h': h, 't': int(time.time())}
+            m['logo'] = {'w': w, 'h': h, 't': int(time.time()), **({'default': True} if use_default else {})}
         save_meta(job, m)
     return jsonify(logo=m.get('logo'))
 
@@ -287,6 +293,8 @@ def normalize_scene(s, ids, pick):
         out['tr'] = s['tr']
     if s.get('v') in (0, 1):
         out['v'] = s['v']
+    if s.get('cbar') is False:   # 사진 콜라주 하단 막대를 이 장면만 끈 경우
+        out['cbar'] = False
     if t == 'collage':
         ps = [x for x in dict.fromkeys(s.get('photos') or []) if x in ids][:4]
         if s.get('photo') in ids and s['photo'] not in ps:
@@ -343,6 +351,9 @@ def plan():
         revise += ('내레이션(성우가 읽는 말)도 써라. intro_narr(공백 제외 %d자 이내), 각 장면에 narr(공백 제외 %d자 이내), '
                    'outro_narr(공백 제외 %d자 이내, 감사·마무리 인사) 필드를 반드시 모두 추가한다. 화면 글자를 그대로 읽지 말고 듣기 편한 존댓말 한 문장으로.\n'
                    % (cap(*sl[0]), cap(*sl[1]), cap(*sl[-1])))
+    order = b.get('order') if b.get('order') in ORDERS else 'ai'
+    if order == 'time':
+        revise += '장면은 사진의 촬영 시각이 이른 것부터 늦은 것 순서로 배치하라(행사의 진행 순서). 각 장면에는 시각이 가까운 사진을 함께 써라.\n'
     if b.get('prev') and b.get('revise'):
         revise += '이전 구성(JSON): %s\n이 구성을 아래 수정 요청에 맞게 고쳐서 같은 스키마로 다시 답해라: %s' % (
             json.dumps(b['prev'], ensure_ascii=False), b['revise'])
@@ -355,7 +366,8 @@ def plan():
                                 b.get('brief') or '(없음)', b.get('org') or '', revise)}]
     for p in photos:
         kind = f' 동영상({p["dur"]:.0f}초, 아래는 한 장면)' if p.get('kind') == 'video' else ''
-        parts.append({'text': f'사진id={p["id"]}{kind} 폴더={p["folder"] or "(없음)"} 파일={p["path"].split("/")[-1]}'})
+        when = f' 촬영={p["taken"].replace("T", " ")[:16]}' if p.get('taken') else ''
+        parts.append({'text': f'사진id={p["id"]}{kind} 폴더={p["folder"] or "(없음)"} 파일={p["path"].split("/")[-1]}{when}'})
         parts.append({'inline_data': {'mime_type': 'image/jpeg', 'data': base64.b64encode(
             open(os.path.join(jobdir(b['job']), 'thumbs', p['id'] + '.jpg'), 'rb').read()).decode()}})
     try:
@@ -373,21 +385,48 @@ def plan():
         out['style'] = want or (d.get('style') if d.get('style') in STYLES else 'classic')
         prev = b.get('prev') or {}  # 수정 요청 시 사용자가 고른 전환 효과·장면 배치는 유지
         out['seed'] = prev.get('seed') if isinstance(prev.get('seed'), int) else random.randrange(1000)
-        for k in ('transition', 'outro_tr'):
+        for k in ('transition', 'outro_tr', 'opening', 'ending'):
             if prev.get(k):
                 out[k] = prev[k]
         for s, ps in zip(out['scenes'], prev.get('scenes') or []):
-            for k in ('tr', 'v'):
+            for k in ('tr', 'v', 'cbar'):
                 if k in ps and k not in s:
                     s[k] = ps[k]
         if len(out['scenes']) < 1:
             raise RuntimeError('AI가 장면을 만들지 못했습니다. 다시 시도해 주세요.')
+        # 장면 순서: 시간순은 수정 요청 때도 다시 맞추고, 무작위·수동은 처음 만들 때만(사용자가 정리한 순서를 지킨다)
+        if order == 'time' or (order != 'ai' and not b.get('revise')):
+            out['scenes'] = arrange(out['scenes'], order, m['photos'])
     except (RuntimeError, KeyError, TypeError) as e:
         return jsonify(error=str(e)), 502
     with _job_locks[b['job']]:
         save_json(b['job'], 'plan.json', out)
         rev = bump_rev(b['job'])
     return jsonify(plan=out, usage=usage, rev=rev)
+
+
+ORDERS = ('ai', 'time', 'random', 'manual')   # 장면 배치: AI 자동(기본) / 촬영 시간순 / 무작위 / 수동(올린 순서로 시작)
+
+
+def arrange(scenes, order, photos):
+    """장면 순서를 정한다. photos: meta의 사진 목록(올린 순서)."""
+    if order == 'time':
+        return sort_by_taken(scenes, {p['id']: p for p in photos})
+    if order == 'random':
+        return random.sample(scenes, len(scenes))
+    if order == 'manual':   # 장면 대표 사진을 올린 순서대로. 이후 3단계에서 끌어서 정리한다
+        idx = {p['id']: i for i, p in enumerate(photos)}
+        return sorted(scenes, key=lambda s: idx.get(s.get('photo'), len(idx)))
+    return scenes
+
+
+def sort_by_taken(scenes, photos):
+    """장면을 사진 촬영 시각 순으로(콜라주는 가장 이른 사진 기준). 시각을 모르는 장면은 원래 순서대로 맨 뒤로."""
+    def key(s):
+        ts = [photos.get(x, {}).get('taken') for x in (s.get('photos') or []) + [s.get('photo')]]
+        ts = [t for t in ts if t]
+        return (0, min(ts)) if ts else (1, '')
+    return sorted(scenes, key=key)   # sorted는 같은 키끼리 원래 순서를 지킨다
 
 
 # ---------- 내레이션 (edge-tts, 무료·키 불필요) ----------
@@ -987,7 +1026,7 @@ def projects():
         out.append({'job': j, 'title': pl.get('title') or '제목 없음', 'mtime': mt,
                     'updated': time.strftime('%Y-%m-%d %H:%M', time.localtime(mt)),
                     'photos': len(m['photos']), 'thumb': pl.get('intro_photo') or m['photos'][0]['id'],
-                    'video': os.path.exists(os.path.join(d, 'output.mp4')), 'length': st.get('length'),
+                    'video': os.path.exists(os.path.join(d, 'output.mp4')), 'portrait': os.path.exists(os.path.join(d, 'output_portrait.mp4')), 'length': st.get('length'),
                     'scenes': len(pl.get('scenes', []))})
     return jsonify(projects=sorted(out, key=lambda x: -x['mtime']))
 
@@ -1019,6 +1058,11 @@ def status(job):
     if WORKER_TOKEN:  # 화면에서 'PC 렌더 프로그램이 꺼져 있음'을 안내할 수 있게
         s.update(mode='worker', worker_online=worker_online(), worker_name=_worker['name'])
     return jsonify(s)
+
+
+@app.get('/fonts/jua.ttf')
+def logo_font():   # 로고 "크무"용 귀여운 글꼴. 영상용 글꼴 폴더(tools/get_fonts.py)에서 가져오며, 없으면 404(굵은 기본 글꼴로 대체)
+    return send_from_directory(os.path.join(HERE, 'fonts'), 'Jua.ttf')
 
 
 @app.get('/jobs/<job>/<path:f>')
@@ -1086,9 +1130,13 @@ def setup_run():
 os.makedirs(JOBS, exist_ok=True)
 
 if __name__ == '__main__':
-    BOUND_LOCAL = not env('HOST')
     runner.recover()
-    # HOST=0.0.0.0 이면 같은 네트워크의 다른 기기(폰 등)에서 접속 가능. AI 영상 생성은 그래도 이 PC에서만 된다.
-    port = int(env('PORT') or 5000)
-    threading.Timer(1.0, webbrowser.open, [f'http://127.0.0.1:{port}']).start()
-    app.run(host=env('HOST') or '127.0.0.1', port=port, threaded=True, use_reloader=False)
+    # 기본은 0.0.0.0(같은 네트워크의 다른 기기도 http://<이 PC IP>:5100 으로 접속). AI 영상 생성은 그래도 이 PC에서만 된다.
+    # 이 PC에서만 열려면 .env에 HOST=127.0.0.1
+    host = env('HOST') or '0.0.0.0'
+    BOUND_LOCAL = host == '127.0.0.1'
+    port = int(env('PORT') or 5100)
+    url = f'http://{h3_routes.LAN_IP if host == "0.0.0.0" else host}:{port}'
+    print(f'createMovie: {url}', flush=True)
+    threading.Timer(1.0, webbrowser.open, [url]).start()
+    app.run(host=host, port=port, threaded=True, use_reloader=False)

@@ -3,7 +3,7 @@
   const path = location.pathname, on = p => (p === '/' ? path === '/' : path.startsWith(p)) ? 'on' : '';
   const bar = document.createElement('nav');
   bar.id = 'gnav'; bar.setAttribute('aria-label', '서비스');
-  bar.innerHTML = `<a class="logo" href="/"><i></i>createMovie</a><a class="${on('/')}" href="/">홍보 영상(HyperFrames)</a><a class="${on('/h3')}" href="/h3/">AI 영상 생성(Wan2GP)</a><a class="${on('/setup')}" href="/setup">설치·점검</a><a class="${on('/guide')}" href="/guide">사용법</a>
+  bar.innerHTML = `<a class="logo" href="/" aria-label="createMovie"><i></i><span class="w" aria-hidden="true">c<span class="a">rea<b class="p k"><u>♪</u>크</b></span>te<span class="a">Mov<b class="p m">무<u>♫</u></b></span>ie</span></a><a class="${on('/')}" href="/">홍보 영상(HyperFrames)</a><a class="${on('/h3')}" href="/h3/">AI 영상 생성(Wan2GP)</a><a class="${on('/setup')}" href="/setup">설치·점검</a><a class="${on('/guide')}" href="/guide">사용법</a>
     <span id="gg" title="그래픽카드 온도, 전력, 메모리, 팬"></span><button id="gq" aria-expanded="false" aria-controls="gp">대기열 확인 중</button><div id="gp" hidden></div>`;
   document.body.prepend(bar);
   const setHeight = () => document.documentElement.style.setProperty('--nav-h', window.innerWidth <= 720 ? '0px' : `${bar.offsetHeight}px`);  // 화면별 고정 머리글이 이 막대 아래에 붙게

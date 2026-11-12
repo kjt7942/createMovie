@@ -338,10 +338,11 @@
         </div>
       </div>
       <div class="grid2">
-        <div class="field"><span>기관·단체명</span><input class="input" id="org" placeholder="예) 문경시가족센터"><small>모든 장면 오른쪽 위에 표시됩니다</small>
+        <div class="field"><span>기관·단체명</span><input class="input" id="org" value="문경시가족센터" placeholder="예) 문경시가족센터"><small>모든 장면 오른쪽 위에 표시됩니다</small>
           <div class="logo-row"><span class="logo-box" id="logoBox"></span>
             <button class="btn sm" id="logoPick">로고 이미지 올리기</button><button class="btn sm ghost" id="logoDel" hidden>지우기</button>
             <input type="file" id="fLogo" accept="image/png,image/jpeg,image/webp" hidden></div>
+          <label class="switch" style="margin-top:8px"><input type="checkbox" id="logoDef" checked>기본 로고(문경시가족센터) 사용</label>
           <div class="seg sm" id="logoMode" hidden><button data-lm="corner" aria-pressed="true">처음·끝 + 장면 구석</button><button data-lm="ends">처음·끝만</button><button data-lm="off">안 넣기</button></div>
           <small id="logoHint">흰 배경은 자동으로 지워져요</small></div>
         <div class="field"><span>문구 분위기</span>
@@ -356,6 +357,9 @@
         <small style="color:var(--mute)">세로 화면에서는 사진 속 사람 얼굴을 찾아 잘리지 않게 맞춥니다</small></div>
       <div class="field"><span>개인정보</span>
         <label class="switch"><input type="checkbox" id="blurOn">사진·동영상 속 얼굴 흐리게(모자이크) <small style="color:var(--mute);margin-left:6px">외부 게시용 · 자동 감지라 놓칠 수 있어 완성본을 확인하세요 · 동영상은 처음 한 번 시간이 걸려요</small></label></div>
+      <div class="field"><span>장면 순서</span>
+        <div class="seg sm" id="orderMode"><button data-om="ai" aria-pressed="true">AI 자동 배치</button><button data-om="time" aria-pressed="false">촬영 시간순</button><button data-om="random" aria-pressed="false">무작위</button><button data-om="manual" aria-pressed="false">수동</button></div>
+        <small id="orderHint" style="color:var(--mute)"></small></div>
       <div class="field"><span>AI 활용 고지</span>
         <label class="switch"><input type="checkbox" id="discOn">엔딩 화면에 고정 안내문 넣기 <small style="color:var(--mute);margin-left:6px">공모전·외부 게시용 · 엔딩 내내 화면 위쪽에 표시</small></label>
         <input class="input" id="discText" maxlength="60" value="본 영상은 생성형 AI를 활용해 제작되었습니다." aria-label="고정 안내문" hidden></div>
@@ -415,6 +419,12 @@
       <div class="ruler" id="ruler"></div>
       <div class="ticks mono" id="ticks"></div>
       <div class="board" id="board"></div>
+      <div class="row-r" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px">
+        <label class="switch" style="margin-right:auto"><input type="checkbox" id="progOn">영상 전체 진행바 넣기 <small style="color:var(--mute)">화면 맨 아래 · 시네마틱 스타일은 표시 안 함</small></label>
+        <span style="color:var(--mute);font-size:13px">다시 배치:</span>
+        <button class="btn sm" data-reorder="time" title="장면 순서를 사진 촬영 시각 순으로 바꿉니다">촬영 시간순</button>
+        <button class="btn sm" data-reorder="random" title="장면 순서를 무작위로 섞습니다">무작위</button>
+        <button class="btn sm" data-reorder="manual" title="장면 대표 사진을 올린 순서로 놓습니다">올린 순서</button></div>
     </div>
     <div class="panel">
       <div class="panel-h"><h2>연출 스타일</h2><span>바꾸면 글꼴·색·움직임이 통째로 바뀌어요 · 미리보기로 확인해 보세요</span></div>
@@ -556,7 +566,7 @@ function showConflict(on = true) {
 }
 function settings() {
   return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
-          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked, blur: $('#blurOn').checked, logo: logoMode(), disc: discOut()};
+          aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked, blur: $('#blurOn').checked, logo: logoMode(), disc: discOut(), progress: $('#progOn').checked, order: orderMode()};
 }
 function dirty() {   // 바뀔 때마다 1.2초 뒤 자동 저장
   if (!job || loading || conflict) return;
@@ -570,6 +580,8 @@ async function loadProjects(el, limit) {
       <button class="open" data-open="${p.job}"><img src="/jobs/${p.job}/thumbs/${p.thumb}.jpg" alt="" loading="lazy">
         <div><b>${esc(p.title)}</b><small class="mono">${p.updated} · 사진 ${p.photos}장${p.length ? ' · ' + fmtLen(p.length) : ''}</small></div></button>
       <div class="pf"><span class="badge ${p.video ? '' : 'draft'}">${p.video ? '영상 있음' : p.scenes ? '구성 중' : '자료만'}</span>
+        ${p.video ? `<a class="btn sm" href="/jobs/${p.job}/output.mp4" download="${esc(p.title)}${p.portrait ? '_가로' : ''}.mp4">MP4</a>` : ''}
+        ${p.portrait ? `<a class="btn sm" href="/jobs/${p.job}/output_portrait.mp4" download="${esc(p.title)}_세로.mp4">세로 MP4</a>` : ''}
         <button class="btn ghost danger sm" data-delp="${p.job}">삭제</button></div></div>`).join('')
     || '<div class="empty">저장된 프로젝트가 없습니다. 자료를 올리면 자동으로 저장됩니다.</div>';
   el.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openProject(b.dataset.open));
@@ -586,7 +598,7 @@ async function openProject(j) {
   loading = true; $('#projDlg').open && $('#projDlg').close();
   job = j; meta = r.meta; plan = r.plan; const st = r.settings || {};
   rev = st._rev || null; showConflict(false);
-  $('#brief').value = st.brief || ''; $('#org').value = st.org || '';
+  $('#brief').value = st.brief || ''; $('#org').value = st.org || ''; $('#logoDef').checked = false;
   press('#mood', $$('#mood button').find(b => b.textContent === st.mood) || $('#mood button'));
   press('#ratio', $$('#ratio button').find(b => b.dataset.r === st.ratio) || $('#ratio button')); applyRatio();
   press('#style', $$('#style button').find(b => b.dataset.st === (st.style || '')) || $('#style button'));
@@ -594,7 +606,7 @@ async function openProject(j) {
   press('#voice', $$('#voice button').find(b => b.dataset.v === nr.voice) || $('#voice button'));
   press('#rate', $$('#rate button').find(b => +b.dataset.rate === nr.rate) || $('#rate button'));
   $('#length').value = st.length || 30; $('#lenAuto').checked = !!st.lenAuto; $('#beatSync').checked = st.beatSync !== false;
-  $('#blurOn').checked = !!st.blur; $('#subOn').checked = nr.sub !== false; discIn(st.disc);
+  $('#blurOn').checked = !!st.blur; $('#progOn').checked = st.progress === true; setOrder(st.order || (st.timeOrder ? 'time' : 'ai')); $('#subOn').checked = nr.sub !== false; discIn(st.disc);
   press('#logoMode', $$('#logoMode button').find(b => b.dataset.lm === st.logo) || $('#logoMode button')); logoUI();
   pendingSel = st.aEnd ? {s: st.aStart || 0, e: st.aEnd} : null; audioKey = '';
   $('#video').removeAttribute('src'); $('#e1').textContent = $('#e2').textContent = $('#e3').textContent = $('#e4').textContent = $('#note').textContent = '';
@@ -613,7 +625,7 @@ function newProject() {
   clearInterval(poll);
   rev = null; showConflict(false);
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
-  $('#video').removeAttribute('src'); $('#brief').value = $('#org').value = ''; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#subOn').checked = true; discIn('');
+  $('#video').removeAttribute('src'); $('#brief').value = ''; $('#org').value = ORG_DEFAULT; $('#logoDef').checked = true; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#progOn').checked = false; setOrder('ai'); $('#subOn').checked = true; discIn('');
   press('#logoMode', $('#logoMode button'));
   press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true;
   $('#saved').textContent = ''; $('#projDlg').open && $('#projDlg').close();
@@ -669,8 +681,22 @@ async function upload(items) {
   const skipped = all - items.length + (meta.skipped || []).length;
   $('#uplTxt').textContent = skipped ? `완료 · ${skipped}개 파일은 형식이 맞지 않아 건너뜀` : '완료';
   setTimeout(() => { $('#upl').hidden = true; $('#uplBar').style.width = '0'; }, 2500);
-  renderAssets();
+  renderAssets(); applyDefaultLogo();
 }
+// 장면을 촬영 시각 순으로(콜라주는 가장 이른 사진 기준, 시각 모르는 장면은 원래 순서대로 맨 뒤). 서버 sort_by_taken과 같은 규칙.
+function sortScenesByTime() {
+  const t = Object.fromEntries(meta.photos.filter(p => p.taken).map(p => [p.id, p.taken]));
+  const key = s => [...(s.photos || []), s.photo].map(x => t[x]).filter(Boolean).sort()[0] || '\uffff';
+  plan.scenes = plan.scenes.map((s, i) => [key(s), i, s]).sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]).map(x => x[2]);
+}
+function reorder(kind) {   // 서버 arrange()와 같은 규칙
+  if (kind === 'time') sortScenesByTime();
+  else if (kind === 'random') { const a = plan.scenes; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
+  else { const idx = Object.fromEntries(meta.photos.map((p, i) => [p.id, i])); plan.scenes = plan.scenes.map((s, i) => [idx[s.photo] ?? 1e9, i, s]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(x => x[2]); }
+  renderPlan(); dirty();
+  $('#note').textContent = {time: '장면을 촬영 시간순으로 정렬했습니다.', random: '장면 순서를 무작위로 섞었습니다.', manual: '장면을 사진을 올린 순서로 놓았습니다. 카드를 끌어 정리하세요.'}[kind];
+}
+$$('[data-reorder]').forEach(b => b.onclick = () => reorder(b.dataset.reorder));
 function renderAssets() {
   const g = {};
   meta.photos.forEach(p => (g[p.folder || '폴더 없이 올린 사진'] ||= []).push(p));
@@ -680,7 +706,8 @@ function renderAssets() {
   else loadProjects($('#recent'), 6).then(n => $('#recentPanel').hidden = !n || !!job);
   $('#dropTitle').textContent = has ? '자료를 더 추가하려면 여기로 끌어 놓으세요' : '폴더나 파일을 여기로 끌어 놓으세요';
   const nv = meta.photos.filter(p => p.kind === 'video').length;
-  $('#assetsCount').textContent = `사진 ${meta.photos.length - nv}장${nv ? ` · 동영상 ${nv}개` : ''} · 폴더 ${Object.keys(g).length}개`;
+  const nt = meta.photos.filter(p => p.taken).length;
+  $('#assetsCount').textContent = `사진 ${meta.photos.length - nv}장${nv ? ` · 동영상 ${nv}개` : ''} · 폴더 ${Object.keys(g).length}개${nt ? ` · 촬영 일시 ${nt}개` : ''}`;
   $('#groups').innerHTML = Object.entries(g).map(([k, ps]) => `<div class="grp">
       <div class="grp-name" title="${esc(k)}">${esc(k)}<small>${ps.filter(p => p.kind !== 'video').length ? `사진 ${ps.filter(p => p.kind !== 'video').length}장` : ''}${ps.some(p => p.kind === 'video') ? ` 동영상 ${ps.filter(p => p.kind === 'video').length}개` : ''}</small></div>
       <div class="strip">${ps.slice(0, 14).map(p => p.kind === 'video' ? `<span class="vthumb" title="동영상 ${p.dur.toFixed(1)}초"><img src="${thumb(p.id)}" alt="" loading="lazy"><b>▶ ${Math.round(p.dur)}s</b></span>` : `<img src="${thumb(p.id)}" alt="" loading="lazy">`).join('')}${ps.length > 14 ? `<span class="more mono">+${ps.length - 14}</span>` : ''}</div></div>`).join('')
@@ -707,9 +734,23 @@ const logoMode = () => $('#logoMode button[aria-pressed="true"]').dataset.lm;
 const DISC_DEFAULT = '본 영상은 생성형 AI를 활용해 제작되었습니다.';
 const discOut = () => $('#discOn').checked ? ($('#discText').value.trim() || DISC_DEFAULT) : '';
 function discIn(t) { $('#discOn').checked = !!t; $('#discText').value = t || DISC_DEFAULT; $('#discText').hidden = !t; }
-const planOut = () => ({...plan, blur: $('#blurOn').checked, logo: logoMode(), disclaimer: discOut()});   // 서버로 보낼 구성(옵션 포함)
+const planOut = () => ({...plan, blur: $('#blurOn').checked, logo: logoMode(), disclaimer: discOut(), progress: $('#progOn').checked});   // 서버로 보낼 구성(옵션 포함)
+const ORG_DEFAULT = '문경시가족센터';
+async function logoPost(fd) { return fetch('/api/logo', {method: 'POST', body: fd}).then(r => r.json()).catch(() => ({error: '서버에 연결하지 못했습니다.'})); }
+async function applyDefaultLogo() {   // 기본 로고 체크 상태인데 로고가 없으면 넣는다(프로젝트가 만들어진 뒤에 호출)
+  if (!job || meta.logo || !$('#logoDef').checked) return;
+  const fd = new FormData(); fd.append('job', job); fd.append('default', '1');
+  const r = await logoPost(fd); if (r.error) { $('#e2').textContent = r.error; return; }
+  meta.logo = r.logo; logoUI(); dirty();
+}
+$('#logoDef').onchange = async () => {
+  if (!job) return;   // 프로젝트가 없으면 체크 상태만 기억했다가 사진을 올린 뒤 적용
+  if ($('#logoDef').checked) { delete meta.logo; await applyDefaultLogo(); }   // 직접 올린 로고가 있으면 기본 로고로 교체
+  else if (meta.logo && meta.logo.default) $('#logoDel').click();
+};
 function logoUI() {
   const has = !!meta.logo;
+  $('#logoDef').checked = meta.logo ? !!meta.logo.default : $('#logoDef').checked;
   $('#logoBox').innerHTML = has ? `<img src="/jobs/${job}/assets/logo.png?t=${meta.logo.t}" alt="로고">` : '';
   $('#logoDel').hidden = $('#logoMode').hidden = !has; $('#logoPick').textContent = has ? '로고 바꾸기' : '로고 이미지 올리기';
 }
@@ -722,9 +763,21 @@ $('#fLogo').onchange = async e => {
   meta.logo = r.logo; logoUI(); dirty();
 };
 $('#logoDel').onclick = async () => { const fd = new FormData(); fd.append('job', job); fd.append('remove', '1');
-  await fetch('/api/logo', {method: 'POST', body: fd}); delete meta.logo; logoUI(); dirty(); };
+  await fetch('/api/logo', {method: 'POST', body: fd}); delete meta.logo; $('#logoDef').checked = false; logoUI(); dirty(); };
 $$('#logoMode button').forEach(b => b.onclick = () => { press('#logoMode', b); dirty(); });
-$('#blurOn').onchange = () => dirty();
+$('#blurOn').onchange = $('#progOn').onchange = () => dirty();
+// 장면 배치 방식: 2단계에서 고르면 AI가 구성을 만들 때 적용된다
+const ORDER_HINT = {ai: 'AI가 주제와 내용 흐름에 맞게 장면 순서를 정해요',
+  time: '사진 촬영 시각 순서대로 · 행사 기록·하루 일정처럼 진행 순서가 중요한 영상에 좋아요',
+  random: '장면 순서를 무작위로 섞어요 · 매번 다른 느낌',
+  manual: '사진을 올린 순서로 시작해요 · 3단계에서 카드를 끌어 직접 정리하세요'};
+const orderMode = () => ($('#orderMode button[aria-pressed="true"]') || {dataset: {om: 'ai'}}).dataset.om;
+function setOrder(v) {
+  press('#orderMode', $$('#orderMode button').find(b => b.dataset.om === v) || $('#orderMode button'));
+  const nt = meta.photos.filter(p => p.taken).length;
+  $('#orderHint').textContent = ORDER_HINT[orderMode()] + (orderMode() === 'time' ? ` · 촬영 일시가 있는 자료 ${nt}/${meta.photos.length}개` : '');
+}
+$$('#orderMode button').forEach(b => b.onclick = () => { setOrder(b.dataset.om); dirty(); });
 $('#discOn').onchange = () => { $('#discText').hidden = !$('#discOn').checked; dirty(); };
 $('#discText').oninput = () => dirty();
 $$('#style button').forEach(b => b.onclick = () => { press('#style', b); dirty(); });
@@ -900,7 +953,7 @@ async function ask(revise) {
   busy.innerHTML = `<span class="spin"></span>${revise ? '수정하는 중' : 'AI가 사진을 살펴보는 중'}`; $('#note').textContent = '';
   const prevPlan = revise ? structuredClone(plan) : null;
   await saveNow();
-  const r = await post('/api/plan', {rev, job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), style: revise ? (plan.style || styleSel()) : styleSel(), ratio: ratio() === 'both' ? 'portrait' : ratio(), narr:narrSel(),
+  const r = await post('/api/plan', {rev, job, brief:$('#brief').value, org:$('#org').value, length:lengthSec(), mood:mood(), style: revise ? (plan.style || styleSel()) : styleSel(), ratio: ratio() === 'both' ? 'portrait' : ratio(), narr:narrSel(), order: orderMode(),
     ...(revise ? {revise, prev: prevPlan} : {})}).catch(() => ({error: '서버에 연결하지 못했습니다. 서버가 켜져 있는지 확인해 주세요.'}));
   btns.forEach(b => b.disabled = false); busy.innerHTML = old;
   if (r.error) { (revise ? $('#e3') : $('#e2')).textContent = r.error; return; }
@@ -968,7 +1021,8 @@ function sceneFields(s, i) {
   const strip = t !== 'collage' ? '' : `<div class="lbl">사진 (2~4장) · 눌러서 바꾸기</div><div class="cstrip">${(s.photos || []).map((p, k) =>
       `<button class="cthumb" data-pick="${i}:${k}" title="사진 바꾸기"><img src="${thumb(p)}" alt=""></button>`).join('')}
       ${(s.photos || []).length < 4 ? `<button class="cadd" data-cadd="${i}" title="사진 추가">＋</button>` : ''}
-      ${(s.photos || []).length > 2 ? `<button class="cadd" data-cdel="${i}" title="마지막 사진 빼기">－</button>` : ''}</div>`;
+      ${(s.photos || []).length > 2 ? `<button class="cadd" data-cdel="${i}" title="마지막 사진 빼기">－</button>` : ''}</div>
+      <label class="switch" style="margin-top:8px;font-size:13px"><input type="checkbox" data-cbar="${i}" ${s.cbar === false ? '' : 'checked'}>아래에 진행 막대 넣기</label>`;
   return `${inp('ttl', 't', '장면 제목', '제목')}${inp('sub', 's', '설명 한 줄', '설명')}${strip}`;
 }
 function renderPlan() {
@@ -991,7 +1045,8 @@ function renderPlan() {
   $('#board').innerHTML =
     `<article class="card" data-card="intro"><div style="position:relative">${photoBtn(plan.intro_photo, 'intro')}${tc(0, 4.4)}<span class="kind">오프닝</span></div>
       <div class="card-b">${f('title', '제목', 't')}${f('tagline', '슬로건', 's')}${f('org', '기관명', 's')}${f('year', '연도', 's')}
-        ${nbox('data-k="intro_narr"', plan.intro_narr, caps[0], '비워 두면 제목과 슬로건을 읽어요')}</div></article>` +
+        ${nbox('data-k="intro_narr"', plan.intro_narr, caps[0], '비워 두면 제목과 슬로건을 읽어요')}</div>
+      <div class="card-f"><span class="grip" style="cursor:default">화면 배치</span>${laySel(plan.opening, 'opening')}</div></article>` +
     plan.scenes.map((s, i) => `<article class="card" data-card="${i}" data-i="${i}">
       <div style="position:relative">${photoBtn(s.photo, sType(s) === 'collage' ? i + ':0' : i)}${tc(starts[i], ends[i] + 0.6)}<span class="kind">${TYPES[sType(s)]}</span></div>
       <div class="card-b"><div class="trow"><select class="trsel typesel" data-type="${i}" aria-label="${i + 1}번 장면 유형">${Object.entries(TYPES).map(([k, v]) =>
@@ -1006,7 +1061,9 @@ function renderPlan() {
     `<article class="card" data-card="outro"><div style="position:relative">${photoBtn(plan.outro_photo, 'outro')}${tc(os, L)}<span class="kind">엔딩</span></div>
       <div class="card-b">${f('outro0', '첫째 줄', 't')}${f('outro1', '둘째 줄', 't')}${f('outro2', '마무리 문장', 's')}
         ${nbox('data-k="outro_narr"', plan.outro_narr, caps[caps.length - 1], '비워 두면 마무리 1·2행을 읽어요')}</div>
+      <div class="card-f"><span class="grip" style="cursor:default">화면 배치</span>${laySel(plan.ending, 'ending')}</div>
       <div class="card-f"><span class="grip" style="cursor:default">들어올 때</span>${trSel(plan.outro_tr, 'outro')}</div></article>`;
+  $$('#board .laysel').forEach(sel => sel.onchange = () => { plan[sel.dataset.lay] = sel.value || undefined; dirty(); });
   // 연출 스타일
   const cur = plan.style || 'classic';
   $('#stChips').innerHTML = Object.entries(STYLE_NAMES).map(([k, v]) => `<button class="chip" data-st="${k}" aria-pressed="${k === cur}">${v}</button>`).join('');
@@ -1016,11 +1073,13 @@ function renderPlan() {
   $('#trChips').innerHTML = ['mix', ...TR_KEYS].map(k => `<button class="chip" data-tr="${k}" aria-pressed="${k === g}">${TR[k]}</button>`).join('');
   $$('#trChips [data-tr]').forEach(c => { c.onclick = () => { plan.transition = c.dataset.tr; renderPlan(); previewTr(c.dataset.tr); };
     c.onmouseenter = c.onfocus = () => previewTr(c.dataset.tr); });
-  $$('#board .trsel').forEach(sel => sel.onchange = () => {
+  $$('#board .trsel:not(.laysel)').forEach(sel => sel.onchange = () => {
     if (sel.dataset.tr === 'outro') plan.outro_tr = sel.value; else plan.scenes[+sel.dataset.tr].tr = sel.value;
     previewTr(sel.value || g); dirty();
   });
   // 입력 즉시 상태 반영
+  $$('#board [data-cbar]').forEach(c => c.onchange = () => {   // 사진 콜라주 장면별 하단 막대(기본 켬)
+    const sc = plan.scenes[+c.dataset.cbar]; if (c.checked) delete sc.cbar; else sc.cbar = false; dirty(); });
   $$('#board .ed').forEach(el => el.oninput = () => {
     if (el.dataset.s) { const sc = plan.scenes[+el.dataset.s];
       sc[el.dataset.f] = el.dataset.f === 'items' ? el.value.split('\n') : el.value;
@@ -1047,6 +1106,9 @@ function renderPlan() {
     const used = new Set(plan.scenes.flatMap(x => [x.photo, ...(x.photos || [])]));
     sc.photos.push((meta.photos.find(p => !used.has(p.id)) || meta.photos[0]).id); renderPlan(); });
   $$('#board [data-cdel]').forEach(b => b.onclick = () => { plan.scenes[+b.dataset.cdel].photos.pop(); renderPlan(); });
+  const nTaken = meta.photos.filter(p => p.taken).length;
+  $('[data-reorder="time"]').disabled = !nTaken;
+  $('[data-reorder="time"]').title = nTaken ? `촬영 일시가 있는 자료 ${nTaken} / ${meta.photos.length}개 기준으로 정렬합니다` : '촬영 일시 정보가 있는 사진이 없어요';
   $('#addScene').onclick = () => {
     const free = meta.photos.find(p => !used.has(p.id)) || meta.photos[0];
     plan.scenes.push({type: 'title', ttl: '', sub: '', photo: free.id}); renderPlan(); summary();
@@ -1073,8 +1135,14 @@ function renderPlan() {
 // ---------- 화면 전환 미리보기 (server.py TIMELINE_JS의 trans()와 같은 움직임) ----------
 const TR = {mix: '다양하게 섞기', panel: '컬러 패널', slide: '밀어내기', fade: '페이드', zoom: '줌인', blur: '흐림',
             wipe: '닦아내기', 'wipe-up': '아래에서 위로', split: '가운데서 열기', circle: '원형 확장', diagonal: '대각선',
-            whip: '휙 넘기기', flash: '플래시', spin: '회전 줌'};
+            whip: '휙 넘기기', flash: '플래시', spin: '회전 줌', 'slide-up': '아래에서 밀어 올리기', 'slide-down': '위에서 내려오기',
+            curtain: '커튼 열기', diamond: '다이아몬드', blinds: '블라인드', 'zoom-out': '줌아웃', flip: '카드 뒤집기'};
 const TR_KEYS = Object.keys(TR).slice(1);
+// 오프닝·엔딩 화면 배치(composer.LAYOUTS). 자동이면 영상마다 다르게 고른다.
+const LAYS = {center: '가운데', split: '분할(사진 + 색 면)', poster: '포스터(선명한 사진)', card: '카드(흐린 사진 위 카드)',
+  polaroid: '폴라로이드(기울인 액자)', circle: '원형(둥근 사진)', band: '띠(비스듬한 색 띠)', solid: '단색(사진 없이 글자만)'};
+const laySel = (v, k) => `<select class="trsel laysel" data-lay="${k}" aria-label="${k === 'opening' ? '오프닝' : '엔딩'} 화면 배치" title="화면 배치">
+  <option value="">배치: 자동(영상마다 다르게)</option>${Object.entries(LAYS).map(([x, n]) => `<option value="${x}" ${v === x ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
 const trSel = (v, i) => `<select class="trsel" data-tr="${i}" aria-label="전환 효과" title="이 장면이 들어올 때의 전환 효과">
   <option value="">전환: 전체 설정</option>${TR_KEYS.map(k => `<option value="${k}" ${v === k ? 'selected' : ''}>${TR[k]}</option>`).join('')}</select>`;
 let trAnims = [], mixT = 0;
@@ -1093,10 +1161,17 @@ function previewTr(k) {
     const o = {duration: 850, easing: 'cubic-bezier(.65,0,.35,1)', fill: 'both', delay: 250};
     const C = {wipe: ['inset(0 0 0 100%)', 'inset(0 0 0 0%)'], 'wipe-up': ['inset(100% 0 0 0)', 'inset(0% 0 0 0)'],
       split: ['inset(0 50% 0 50%)', 'inset(0 0% 0 0%)'], circle: ['circle(0% at 50% 50%)', 'circle(150% at 50% 50%)'],
-      diagonal: ['polygon(0% 0%, 0% 0%, -50% 100%, -50% 100%)', 'polygon(0% 0%, 150% 0%, 100% 100%, -50% 100%)']};
+      diagonal: ['polygon(0% 0%, 0% 0%, -50% 100%, -50% 100%)', 'polygon(0% 0%, 150% 0%, 100% 100%, -50% 100%)'],
+      curtain: ['inset(50% 0 50% 0)', 'inset(0% 0 0% 0)'],
+      diamond: ['polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%)', 'polygon(50% -50%, 150% 50%, 50% 150%, -50% 50%)'],
+      blinds: [0, 20].map(w => 'polygon(' + [0, 1, 2, 3, 4].flatMap(k => [...(k ? [`${20 * k}% 100%`] : []), `${20 * k}% 0%`, `${20 * k + w}% 0%`, `${20 * k + w}% 100%`]).concat('0% 100%').join(', ') + ')')};
     const K = kind === 'panel' ? [{opacity: 0}, {opacity: 0, offset: .4}, {opacity: 1, offset: .41}, {opacity: 1}]
       : C[kind] ? [{opacity: 1, clipPath: C[kind][0]}, {opacity: 1, clipPath: C[kind][1]}]
       : kind === 'slide' ? [{opacity: 1, transform: 'translateX(100%)'}, {opacity: 1, transform: 'none'}]
+      : kind === 'slide-up' ? [{opacity: 1, transform: 'translateY(100%)'}, {opacity: 1, transform: 'none'}]
+      : kind === 'slide-down' ? [{opacity: 1, transform: 'translateY(-100%)'}, {opacity: 1, transform: 'none'}]
+      : kind === 'zoom-out' ? [{opacity: 0, transform: 'scale(.7)'}, {opacity: 1, transform: 'none'}]
+      : kind === 'flip' ? [{opacity: 0, transform: 'perspective(600px) rotateY(90deg)'}, {opacity: 1, transform: 'perspective(600px) rotateY(0deg)'}]
       : kind === 'zoom' ? [{opacity: 0, transform: 'scale(1.25)'}, {opacity: 1, transform: 'none'}]
       : kind === 'blur' ? [{opacity: 0, filter: 'blur(10px)'}, {opacity: 1, filter: 'blur(0)'}]
       : kind === 'whip' ? [{opacity: 1, transform: 'translateX(100%)', filter: 'blur(8px)'}, {opacity: 1, transform: 'none', filter: 'blur(0)'}]
@@ -1249,9 +1324,11 @@ function showOutputs(outs) {   // 완성 영상(가로·세로)과 썸네일
     const lab = o.ratio === 'portrait' ? '세로 9:16' : '가로 16:9', sfx = two ? (o.ratio === 'portrait' ? '_세로' : '_가로') : '';
     return `<div class="out ${o.ratio}"><video src="${u}" controls playsinline preload="metadata"${th ? ` poster="${th}"` : ''}></video>
       <div class="out-f"><b>${lab}</b><a class="btn primary sm" href="${u}" download="${esc(name + sfx)}.mp4">MP4 내려받기</a>
-      ${['localhost', '127.0.0.1'].includes(location.hostname) ? '<button class="btn sm" data-export>저장 폴더로 복사</button>' : ''}
+      <button class="btn sm" data-export hidden>저장 폴더로 복사</button>
       ${th ? `<a class="btn sm" href="${th}" download="${esc(name + sfx)}_썸네일.jpg">썸네일 JPG</a>` : ''}</div></div>`;
   }).join('') || '<div class="empty">완성된 영상 파일을 찾지 못했습니다.</div>';
+  // 이 PC에서 접속했을 때만 보인다(서버가 판단: localhost든 이 PC의 LAN IP든)
+  fetch('api/queue').then(r => r.json()).then(q => { if (q.local) $$('#outs [data-export]').forEach(b => b.hidden = false); }).catch(() => {});
   $$('#outs [data-export]').forEach(b => b.onclick = async () => {
     const r = await post('/api/export/' + job, {}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
     b.textContent = r.error ? '복사 실패' : '복사됨'; b.title = r.error || r.paths.join('\n');

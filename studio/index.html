@@ -464,7 +464,11 @@ $('queueBtn').onclick = async () => {  // Stays on this page, so the next script
 };
 function showUnavailable(state) {  // Finished videos stay viewable. Only making new ones is closed.
   const lines = state.local ? state.reasons : ['AI 영상 생성은 서비스가 실행 중인 PC에서만 쓸 수 있습니다. 그 PC의 브라우저에서 접속하세요.'];
-  fill($('unavailable'), el('h2', { textContent: '이 환경에서는 H3 영상을 생성할 수 없습니다' }),
+  // 원인별 제목: 다른 PC에서 접속(GPU가 있어도 불가) / GPU 없음·메모리 부족·응답 없음 / 도구 미설치
+  const title = !state.local ? '이 PC에서는 AI 영상을 생성할 수 없습니다. 서버 PC에서 접속하세요'
+    : !state.gpu_ok ? '사용할 수 있는 NVIDIA 그래픽카드가 없는 환경에서는 AI 영상을 생성할 수 없습니다'
+    : 'AI 영상 생성 도구가 설치되지 않아 영상을 생성할 수 없습니다';
+  fill($('unavailable'), el('h2', { textContent: title }),
     ...lines.map(r => el('div', { class: 'msg warn', textContent: r })),
     el('div', { class: 'muted', textContent: '사진으로 만드는 홍보 영상은 GPU 없이도 쓸 수 있습니다.' }),
     el('div', { class: 'row', style: 'margin-top:10px' },
