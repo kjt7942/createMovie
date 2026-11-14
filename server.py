@@ -9,7 +9,7 @@ import beats
 import composer
 import media
 from composer import SCENE_TYPES, STYLES, scene_speech
-from studio import engine, h3_routes
+from studio import batch, engine, h3_routes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 JOBS = os.path.join(HERE, 'jobs')
@@ -697,7 +697,7 @@ class PromoQueue:
                 set_status(j, s.get('rev'), state='queued', pct=0)
 
 
-runner.external = PromoQueue()
+runner.external = batch.BatchQueue(PromoQueue())
 
 
 @app.get('/api/queue')
@@ -1115,6 +1115,47 @@ def setup_status():
 @app.get('/setup')
 def setup_page():
     return app.send_static_file('setup.html')
+
+
+@app.get('/batch')
+def batch_page():
+    return app.send_static_file('batch.html')
+
+
+@app.get('/characters')
+def characters_page():
+    return app.send_static_file('characters.html')
+
+
+CHAR_EN = """You write character descriptions for an image model (Qwen-Image) and a video model that keeps a character's look.
+Rewrite the Korean character description below as ONE English paragraph of 40 to 90 words.
+Describe only what can be seen: art style (keep the user's style; default to a clean 2D cartoon illustration if none is given),
+species or body type, age look, face, hair, eyes, clothing with colors and patterns, accessories, and distinctive marks.
+Turn personality and background story into visible cues only (facial expression, eye shape, posture, outfit, props).
+Keep body proportions the user gives (for example "3 heads tall" means a big head on a short chibi body).
+Use concrete colors. Do not put the scene background, camera or story in the description. No names, no Korean, no quotes.
+If the Korean text describes a background, write it separately as a short English phrase in "background"; otherwise "".
+Keep the user's requested mood and appeal words (for example sexy, glamorous, charming) in the description.
+Return JSON: {"description": "...", "background": "..."}
+Korean description:
+%s"""
+
+
+@app.post('/api/character_english')
+def character_english():
+    text = str((request.get_json(silent=True) or {}).get('text', '')).strip()
+    if not 5 <= len(text) <= 1500:
+        return jsonify(error='캐릭터 설명을 5~1500자로 적어 주세요.'), 400
+    try:
+        d, _ = gemini([{'text': CHAR_EN % text}])
+    except RuntimeError as e:
+        return jsonify(error=str(e)), 502
+    desc = ' '.join(str(d.get('description', '') if isinstance(d, dict) else '').split())
+    desc = re.sub(r'[가-힣一-鿿]', '', desc).strip()  # 한글이 섞이면 등록에서 막히므로 지운다
+    if len(desc) < 20:
+        return jsonify(error='영어 설명을 만들지 못했습니다. 다시 눌러 주세요.'), 502
+    bg = re.sub(r'[가-힣一-鿿]', '', ' '.join(str(d.get('background', '')).split())).strip()
+    return jsonify(description=desc, background=bg)
 
 
 @app.get('/guide')

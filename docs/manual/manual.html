@@ -46,9 +46,10 @@ figure { margin:0 0 9pt; break-inside:avoid; } figcaption { font-size:8.8pt; col
     <li>캐릭터 등록과 여러 캐릭터 쓰기</li>
     <li>대기열과 GPU 표시</li>
     <li>설치·점검 화면</li>
+    <li>콘텐츠 생성과 모델 라이선스</li>
     <li>문제 해결과 한계</li>
   </ol>
-  <p style="color:var(--ink2);font-size:9.5pt;margin-top:20pt">2026년 11월 12일 기준</p>
+  <p style="color:var(--ink2);font-size:9.5pt;margin-top:20pt">2026년 11월 15일 기준</p>
 </section>
 
 <h2>1. 서비스 한눈에 보기</h2>
@@ -57,6 +58,8 @@ figure { margin:0 0 9pt; break-inside:avoid; } figcaption { font-size:8.8pt; col
   <tr><th style="width:27%">메뉴</th><th>하는 일</th><th style="width:30%">필요한 것</th></tr>
   <tr><td>홍보 영상(HyperFrames)</td><td>사진·동영상·음악을 올리면 AI가 장면을 구성하고 MP4로 만듭니다.</td><td>Gemini API 키. GPU는 없어도 됩니다.</td></tr>
   <tr><td>AI 영상 생성(Wan2GP)</td><td>스크립트와 캐릭터 이미지로 영상을 새로 생성합니다.</td><td>NVIDIA GPU 메모리 8GB 이상, 디스크 약 80GB, 서버가 실행 중인 PC에서만 사용</td></tr>
+  <tr><td>캐릭터 생성</td><td>한글 설명으로 캐릭터의 정면·옆·뒤·포즈 이미지를 만들고, AI 영상 생성용 캐릭터로 등록합니다.</td><td>Gemini API 키(영어 다듬기), NVIDIA GPU, 서버가 실행 중인 PC에서만 사용</td></tr>
+  <tr><td>콘텐츠 생성</td><td>Wan2GP의 모든 모델로 이미지, 영상, 음성, 음악을 만듭니다. 공모전용 작업은 확인된 모델만 받습니다.</td><td>NVIDIA GPU, 서버가 실행 중인 PC에서만 사용. 처음 쓰는 모델은 내려받습니다.</td></tr>
   <tr><td>설치·점검</td><td>도구 상태 확인, 자동 설치, GPU 설정, 저장 폴더와 저장 공간을 관리합니다.</td><td>-</td></tr>
   <tr><td>사용법</td><td>이 설명서를 봅니다.</td><td>-</td></tr>
 </table>
@@ -151,6 +154,15 @@ figure { margin:0 0 9pt; break-inside:avoid; } figcaption { font-size:8.8pt; col
 <pre>A round plump cartoon hen with red-brown layered feathers, bright red comb,
 big brown eyes with lashes, yellow beak and legs, and a cream floral scarf.</pre>
 <div class="note"><b>삼면도는 면별로 잘라서 올리세요.</b> 한 장을 그대로 올리면 여러 마리로 인식되거나 그림 속 글자가 영상에 나올 수 있습니다. 서비스가 자동으로 나눠 주지는 않습니다.</div>
+<h3>이미지가 없을 때: 캐릭터 생성</h3>
+<p>상단 메뉴의 <b>캐릭터 생성</b>에서 이미지를 만들어 바로 등록할 수 있습니다.</p>
+<ol>
+  <li>이름과 <b>한글</b> 설명을 적고 <b>영어로 다듬기</b>를 누릅니다. Gemini가 그림체·생김새·옷 색만 담은 영어 설명으로 바꿉니다. 영어 설명은 고쳐도 됩니다.</li>
+  <li><b>정면 시안 만들기</b>를 누르면 Qwen-Image로 정면 전신 시안을 만듭니다. 처음에는 초안(480x832)으로 보고, 마음에 들면 고화질로 다시 만드세요.</li>
+  <li>정면 시안 하나를 고르고 <b>고른 정면으로 다른 시점 만들기</b>를 누릅니다. Qwen-Image-Edit가 같은 캐릭터의 옆·뒤·포즈를 시점마다 2장씩 만듭니다.</li>
+  <li>시점마다 하나씩 고르고 <b>캐릭터로 등록</b>을 누릅니다. 고르지 않은 시점은 빠집니다. 등록하면 AI 영상 생성의 캐릭터 목록에 나타납니다.</li>
+</ol>
+<div class="note">시점을 바꾸면 얼굴이나 옷의 작은 무늬가 조금 달라질 수 있습니다. 정면과 가장 비슷한 것을 고르세요.</div>
 <h3>사용</h3>
 <ul>
   <li>캐릭터를 체크합니다. <b>체크한 순서대로 Character A, Character B</b>가 됩니다.</li>
@@ -167,7 +179,7 @@ while Character B stays on the right and turns to face her.</pre>
 
 <h2>6. 대기열과 GPU 표시</h2>
 <h3>대기열</h3>
-<p>홍보 영상 렌더와 AI 영상 생성은 한 대기열에서 넣은 순서대로 하나씩 처리되어 겹치지 않습니다. 메뉴 오른쪽의 대기열 버튼을 눌러 목록을 엽니다.</p>
+<p>홍보 영상 렌더, AI 영상 생성, 콘텐츠 생성은 한 대기열에서 넣은 순서대로 하나씩 처리되어 겹치지 않습니다. 메뉴 오른쪽의 대기열 버튼을 눌러 목록을 엽니다.</p>
 <table>
   <tr><th style="width:24%">조작</th><th>설명</th></tr>
   <tr><td>▲ ▼</td><td>기다리는 작업의 순서를 바꿉니다.</td></tr>
@@ -197,7 +209,40 @@ while Character B stays on the right and turns to face her.</pre>
 </table>
 <div class="note"><b>프로젝트 삭제는 되돌릴 수 없습니다.</b> 휴지통을 거치지 않으니, 남길 영상은 먼저 저장 폴더로 복사하세요.</div>
 
-<h2>8. 문제 해결과 한계</h2>
+<h2>8. 콘텐츠 생성과 모델 라이선스</h2>
+<h3>콘텐츠 생성 쓰는 법</h3>
+<ol>
+  <li>메뉴에서 <b>콘텐츠 생성</b>을 엽니다.</li>
+  <li>모델을 이름으로 검색해 고르고 프롬프트를 적습니다. 비운 항목은 모델 기본값을 씁니다.</li>
+  <li>모델에 필요하면 시작 이미지, 참고 이미지, 오디오를 올립니다. 모델 전용 설정은 <b>추가 설정</b>에 JSON으로 적습니다.</li>
+  <li><b>대기열에 넣기</b>를 누릅니다. 진행률, 결과, 시드, 걸린 시간, 최고 온도가 화면에 나타납니다.</li>
+</ol>
+<p>멈춘 작업은 <b>이어서 생성</b>을 누르면 끝난 항목을 건너뛰고 계속합니다. 결과는 일반 작업이 <code>jobs/content/</code>, 공모전용 작업이 <code>jobs/contest/</code>에 저장됩니다.</p>
+<div class="note">화면은 모델별로 어떤 입력이 필요한지 구분해 주지 않습니다. 입력이 빠지면 항목이 실패로 표시되니 오류 내용을 보고 추가 설정을 고치세요.</div>
+<h3>일반 작업과 공모전용 작업</h3>
+<p>일반 작업은 모델을 막지 않습니다. 크무가 막지 않을 뿐 <b>각 모델의 라이선스 조건은 그대로 적용</b>되므로, 외부 공개나 판매에 쓸 결과물은 모델 라이선스를 직접 확인하세요. <b>공모전용</b>을 체크한 작업은 아래 표의 모델과 후처리만 받습니다.</p>
+<h3>공모전에 쓸 수 있는 모델과 도구</h3>
+<table>
+  <tr><th style="width:17%">단계</th><th style="width:37%">모델·도구</th><th style="width:21%">라이선스</th><th>용도</th></tr>
+  <tr><td>이미지</td><td>Qwen-Image-Edit 2511, Qwen-Image 2512, Z-Image, FLUX.2 klein 4B</td><td>Apache 2.0</td><td>캐릭터 합성, 풍경 컷</td></tr>
+  <tr><td>영상</td><td>Wan 2.2 I2V·T2V·TI2V, Wan 2.1 FLF2V, Lightning LoRA</td><td>Apache 2.0</td><td>컷 영상, 시작·끝 프레임 연결, 빠른 초안</td></tr>
+  <tr><td>립싱크</td><td>InfiniteTalk</td><td>Apache 2.0</td><td>대사 입모양</td></tr>
+  <tr><td>음성·음악</td><td>Qwen3 TTS, ACE-Step 1.5</td><td>Apache 2.0, ACE-Step 코드는 MIT</td><td>내레이션, 배경음악</td></tr>
+  <tr><td>후처리</td><td>SeedVR2, FlashVSR, RIFE</td><td>Apache 2.0, RIFE는 MIT</td><td>업스케일, 프레임 보간</td></tr>
+  <tr><td>편집</td><td>HyperFrames, GSAP</td><td>Apache 2.0, GSAP Standard No Charge</td><td>전환 효과, 자막, 최종 합성</td></tr>
+  <tr><td>생성 도구</td><td>Wan2GP</td><td>WanGP Community License 2.0</td><td>생성물 상업 이용 허용, 지역 제한 없음. 도구 자체의 판매·호스팅은 금지</td></tr>
+</table>
+<h3>공모전에 쓰지 않는 모델</h3>
+<table>
+  <tr><th style="width:38%">모델</th><th style="width:25%">이유</th><th>설명</th></tr>
+  <tr><td>MiniMax H3, Hunyuan 계열</td><td>대한민국 제외</td><td>라이선스가 대한민국에 적용되지 않습니다. H3는 생성 영상의 사용도 허용하지 않습니다.</td></tr>
+  <tr><td>MMAudio, FLUX.2 klein 9B</td><td>비상업용</td><td>상금이나 권리 이전이 따르는 공모전에는 쓰지 않습니다.</td></tr>
+  <tr><td>Qwen-Image 2.1</td><td>연구용</td><td>Qwen Research License입니다.</td></tr>
+  <tr><td>LTX-2, Stable Audio 3</td><td>수익 기준 조건부</td><td>LTX-2는 연 매출 1천만 달러, Stable Audio 3는 1백만 달러 이상인 조직에 별도 계약이 필요합니다. 수상작 권리가 넘어가는 경우를 고려해 뺐습니다.</td></tr>
+</table>
+<div class="note">2026년 11월 2일에 공식 페이지의 라이선스 표시와 README로 확인한 내용이며, LICENSE 원문을 모두 읽은 것은 아니고 법률 자문도 아닙니다. 라이선스는 바뀔 수 있으니 제출 전에 실제 쓴 모델을 원문으로 다시 확인하세요. HyperFrames의 카탈로그 블록과 템플릿은 확인하지 않았습니다. 표에 없는 모델은 금지가 확인된 것이 아니라 확인하지 않은 것입니다.</div>
+
+<h2>9. 문제 해결과 한계</h2>
 <table>
   <tr><th style="width:38%">증상</th><th>해결</th></tr>
   <tr><td>AI 영상 화면이 사용 불가로 나옴</td><td>안내된 이유를 확인하세요. GPU 메모리 8GB 미만이면 쓸 수 없고, 도구가 없으면 설치·점검에서 설치합니다. 다른 기기에서 접속했다면 서버가 실행 중인 PC에서 여세요.</td></tr>

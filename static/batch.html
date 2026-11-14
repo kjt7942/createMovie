@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>콘텐츠 생성 · createMovie</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+main { max-width:1200px; margin:0 auto; padding:16px; }
+section { margin-bottom:28px; }
+.head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.head h2 { margin:0; font-size:18px; }
+.track { height:8px; border-radius:4px; background:var(--line); overflow:hidden; margin:8px 0; }
+.track div { height:100%; background:currentColor; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:10px; }
+figure { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+figure img, figure video { display:block; width:100%; aspect-ratio:832/480; object-fit:cover; }
+figure audio { width:100%; }
+figure .ph { display:flex; align-items:center; justify-content:center; aspect-ratio:832/480; font-size:13px; }
+figcaption { padding:6px 8px; font-size:12px; overflow-wrap:anywhere; }
+.running { outline:2px solid currentColor; }
+.err { color:#d33; }
+form { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:24px; }
+form label { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+form .wide { grid-column:1 / -1; }
+form input, form textarea { width:100%; box-sizing:border-box; }
+form label.check { flex-direction:row; align-items:center; }
+form label.check input { width:auto; }
+figure img { cursor:zoom-in; }
+figure { position:relative; }
+figure.pick { outline:3px solid #2e9e4f; }
+.pickbox { position:absolute; top:6px; left:6px; z-index:2; background:#000a; color:#fff; border-radius:6px; padding:3px 8px; font-size:13px; cursor:pointer; display:flex; gap:5px; align-items:center; }
+.pickbox input { width:18px; height:18px; margin:0; cursor:pointer; }
+.sum { font-size:13px; margin:4px 0; }
+.sum b { color:#2e9e4f; } .sum .bad { color:#d33; }
+#lb { position:fixed; inset:0; background:rgba(0,0,0,.88); display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; z-index:50; padding:16px; box-sizing:border-box; }
+#lb.on { display:flex; }
+#lb img { max-width:94vw; max-height:72vh; object-fit:contain; cursor:default; border-radius:6px; }
+#lb .bar { display:flex; align-items:center; gap:10px; color:#fff; font-size:14px; flex-wrap:wrap; justify-content:center; }
+#lb .bar button, #lb .bar a { background:#fff2; color:#fff; border:1px solid #fff6; border-radius:6px; padding:6px 12px; cursor:pointer; text-decoration:none; font-size:14px; }
+#lb .pr { color:#ddd; font-size:12px; max-width:min(94vw,1000px); max-height:16vh; overflow:auto; white-space:pre-wrap; background:#0006; border-radius:6px; padding:8px; }
+.tag { font-size:12px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; }
+</style>
+</head>
+<body class="ui">
+<script src="/nav.js"></script>
+<header class="top"><div class="top-in"><div class="brand">콘텐츠 생성</div></div></header>
+<main>
+<form id="new">
+  <label class="wide">모델 (이름으로 검색)<input name="model" list="models" required autocomplete="off"></label>
+  <datalist id="models"></datalist>
+  <p id="note" class="wide" hidden></p>
+  <label class="wide">프롬프트<textarea name="prompt" rows="3"></textarea></label>
+  <label>해상도 (예: 832x480)<input name="resolution"></label>
+  <label>길이 (프레임 수 또는 10s)<input name="video_length"></label>
+  <label>시드 (비우면 무작위)<input name="seed" type="number" min="0"></label>
+  <label>개수 (시드를 1씩 늘림)<input name="count" type="number" min="1" max="20" value="1"></label>
+  <label>시작 이미지<input name="start_image" type="file" accept=".png,.jpg,.jpeg,.webp"></label>
+  <label>참고 이미지<input name="ref_images" type="file" multiple accept=".png,.jpg,.jpeg,.webp"></label>
+  <label>오디오<input name="audio" type="file" accept=".wav,.mp3,.flac"></label>
+  <label>음악 설명 등 (alt_prompt)<input name="alt_prompt"></label>
+  <label class="wide">추가 설정 (Wan2GP 작업 JSON, 선택)<textarea name="extra" rows="2" placeholder='{"duration_seconds": 30}'></textarea></label>
+  <label class="check wide"><input name="contest" type="checkbox" value="1">공모전용 (라이선스 확인된 모델만 허용)</label>
+  <div class="wide"><button type="submit">대기열에 넣기</button> <small>비운 항목은 모델 기본값을 씁니다. 처음 쓰는 모델은 내려받느라 오래 걸립니다.</small></div>
+</form>
+<div id="list" aria-live="polite"></div>
+</main>
+<div id="lb" role="dialog" aria-label="이미지 크게 보기"><img alt=""><div class="bar"><button id="lbp">← 이전</button><span id="lbt"></span><button id="lbn">다음 →</button><button id="lbk">☆ 선택 (Space)</button><a id="lbo" target="_blank" rel="noopener">새 탭에서 열기</a><button id="lbc">닫기 (Esc)</button></div><div class="pr" id="lbr"></div></div>
+<script>
+const list = document.getElementById('list');
+const WORD = { ready: '대기 전', queued: '대기열에 있음', running: '생성 중', done: '완료', error: '문제 있음', stopped: '멈춤' };
+const ITEM = { pending: '대기', running: '생성 중', failed: '실패' };
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; };
+const media = (b, i) => {
+  const url = `/h3/api/batches/${b.name}/file/${i.name}?t=${encodeURIComponent(i.output)}`;
+  const ext = i.output.split('.').pop().toLowerCase();
+  const m = el(ext === 'mp4' ? 'video' : ['wav', 'mp3', 'flac'].includes(ext) ? 'audio' : 'img');
+  m.src = url;
+  if (m.tagName === 'IMG') { m.alt = i.name; m.loading = 'lazy'; m.title = '클릭하면 크게 봅니다'; m.onclick = () => { shots = b.items.filter(x => x.status === 'done' && x.output && /\.(png|jpe?g|webp)$/i.test(x.output)).map(x => ({ b, i: x })); show(shots.findIndex(x => x.i === i)); }; } else m.controls = true;
+  return m;
+};
+let shots = [], at = 0;  // 지금 열린 작업의 완료 이미지 목록
+const lb = document.getElementById('lb');
+const urlOf = (b, i) => `/h3/api/batches/${b.name}/file/${i.name}?t=${encodeURIComponent(i.output)}`;
+function show(k) {
+  at = (k + shots.length) % shots.length;
+  const { b, i } = shots[at], u = urlOf(b, i);
+  lb.querySelector('img').src = u;
+  document.getElementById('lbt').textContent = `${b.title} · ${i.name} · 시드 ${i.job.seed ?? '-'} · ${at + 1}/${shots.length}`;
+  document.getElementById('lbo').href = u;
+  document.getElementById('lbr').textContent = i.job.prompt || '';
+  lb.classList.add('on'); paintLb();
+}
+const closeLb = () => lb.classList.remove('on');
+async function setPick(b, i, on) {
+  const r = await fetch(`/h3/api/batches/${b.name}/pick`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ item: i.name, on }) }).then(x => x.json()).catch(() => ({ error: '서버 연결 끊김' }));
+  if (r.error) { alert(r.error); return false; }
+  i.pick = on; last = ''; refresh(); return true;
+}
+const cutOf = n => n.replace(/_s\d+$/, '');
+async function toggleLb() { const { b, i } = shots[at]; if (await setPick(b, i, !i.pick)) paintLb(); }
+function paintLb() { document.getElementById('lbk').textContent = shots[at].i.pick ? '★ 선택됨 (Space로 해제)' : '☆ 선택 (Space)'; }
+document.getElementById('lbk').onclick = toggleLb;
+document.getElementById('lbp').onclick = () => show(at - 1);
+document.getElementById('lbn').onclick = () => show(at + 1);
+document.getElementById('lbc').onclick = closeLb;
+lb.onclick = e => { if (e.target === lb) closeLb(); };
+document.addEventListener('keydown', e => {
+  if (!lb.classList.contains('on')) return;
+  if (e.key === 'Escape') closeLb(); else if (e.key === 'ArrowLeft') show(at - 1); else if (e.key === 'ArrowRight') show(at + 1); else if (e.key === ' ') { e.preventDefault(); toggleLb(); }
+});
+const form = document.getElementById('new'), note = document.getElementById('note');
+fetch('/h3/api/batches/models').then(r => r.json()).then(d => {
+  const box = document.getElementById('models');
+  d.models.forEach(m => { const o = el('option'); o.value = m.id; o.label = m.name + (m.contest ? ' · 공모전 가능' : ''); box.append(o); });
+  form.model.oninput = () => {
+    const h3 = form.model.value.startsWith('minimax_h3');
+    note.hidden = !(h3 && d.notice); note.textContent = h3 ? d.notice : ''; note.className = 'wide err';
+  };
+});
+form.onsubmit = async e => {
+  e.preventDefault();
+  const btn = form.querySelector('button');
+  btn.disabled = true;
+  const r = await fetch('/h3/api/batches/form', { method: 'POST', body: new FormData(form) }).then(x => x.json()).catch(() => ({ error: '서버 연결 끊김' }));
+  btn.disabled = false;
+  if (r.error) { alert(r.error); return; }
+  last = ''; refresh();
+};
+let last = '';
+async function refresh() {
+  if (document.hidden) return;
+  let data;
+  try { data = await fetch('/h3/api/batches').then(r => r.json()); } catch { return; }
+  const text = JSON.stringify(data);
+  if (text === last) return;  // 다시 그리면 재생 중인 영상이 멈춘다
+  last = text;
+  list.replaceChildren();
+  if (!data.batches.length) list.append(el('p', '아직 만든 작업이 없습니다.'));
+  data.batches.slice().reverse().forEach(b => {
+    const done = b.items.filter(i => i.status === 'done').length, s = el('section'), head = el('div', '', 'head');
+    head.append(el('h2', b.title), el('span', `${WORD[b.state] || b.state} · ${done}/${b.items.length}`));
+    if (b.contest !== false) head.append(el('span', '공모전', 'tag'));
+    if (!['queued', 'running'].includes(b.state) && done < b.items.length) {
+      const go = el('button', done ? '이어서 생성' : '생성 시작');
+      go.onclick = async () => {
+        go.disabled = true;
+        const r = await fetch(`/h3/api/batches/${b.name}/start`, { method: 'POST' }).then(x => x.json()).catch(() => ({ error: '서버 연결 끊김' }));
+        if (r.error) alert(r.error);
+        last = ''; refresh();
+      };
+      head.append(go);
+    }
+    s.append(head);
+    const track = el('div', '', 'track'), fill = el('div');
+    fill.style.width = `${done / b.items.length * 100}%`; track.append(fill); s.append(track);
+    if (b.message) s.append(el('p', b.message, b.state === 'error' ? 'err' : ''));
+    const cuts = {};
+    b.items.forEach(i => (cuts[cutOf(i.name)] ??= []).push(i));
+    const groups = Object.entries(cuts).filter(([, g]) => g.some(i => i.output && /\.(png|jpe?g|webp)$/i.test(i.output)));
+    if (groups.length) {
+      const doneG = groups.filter(([, g]) => g.every(i => i.status === 'done'));
+      const both = doneG.filter(([, g]) => g.length > 1 && g.every(i => i.pick)), none = doneG.filter(([, g]) => !g.some(i => i.pick));
+      const one = doneG.length - both.length - none.length;
+      const sm = el('div', '', 'sum');
+      sm.innerHTML = `채택 <b>${doneG.length - none.length}</b>컷 (둘 다 ${both.length} · 하나만 ${one}) · <span class="bad">미선택 ${none.length}컷 = 폐기·다시 생성 대상</span>`;
+      if (none.length && !['queued', 'running'].includes(b.state)) {
+        const rb = el('button', `미선택 ${none.length}컷 다시 생성`);
+        rb.onclick = async () => {
+          if (!confirm(`하나도 선택하지 않은 컷을 새 시드로 다시 만듭니다(이전 결과는 남습니다).
+
+${none.map(([c]) => c).join(', ')}
+
+아직 안 본 컷이 있으면 먼저 선택하세요. 진행할까요?`)) return;
+          rb.disabled = true;
+          const r = await fetch(`/h3/api/batches/${b.name}/redo`, { method: 'POST' }).then(x => x.json()).catch(() => ({ error: '서버 연결 끊김' }));
+          if (r.error) alert(r.error);
+          last = ''; refresh();
+        };
+        sm.append(' ', rb);
+      }
+      s.append(sm);
+    }
+    const grid = el('div', '', 'grid');
+    b.items.forEach(i => {
+      const f = el('figure', '', [i.status === 'running' ? 'running' : '', i.pick ? 'pick' : ''].join(' ').trim());
+      f.append(i.status === 'done' && i.output ? media(b, i) : el('div', ITEM[i.status] || i.status, 'ph'));
+      if (i.status === 'done' && i.output && /\.(png|jpe?g|webp)$/i.test(i.output)) {
+        const lab = el('label', '', 'pickbox'), cb = el('input');
+        cb.type = 'checkbox'; cb.checked = !!i.pick; cb.onchange = () => setPick(b, i, cb.checked);
+        lab.append(cb, document.createTextNode('선택')); f.append(lab);
+      }
+      const meta = [i.name, `시드 ${i.job.seed ?? '-'}`, i.seconds != null ? `${i.seconds}초` : '', i.peak_temp != null ? `최고 ${Math.round(i.peak_temp)}°C` : ''].filter(Boolean).join(' · ');
+      const cap = el('figcaption', meta); cap.title = i.job.prompt || '';
+      f.append(cap);
+      if (i.error) { const e = el('figcaption', i.error, 'err'); f.append(e); }
+      grid.append(f);
+    });
+    s.append(grid);
+    list.append(s);
+  });
+}
+refresh(); setInterval(refresh, 3000);
+document.addEventListener('visibilitychange', refresh);
+</script>
+</body>
+</html>

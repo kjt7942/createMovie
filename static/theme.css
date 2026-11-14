@@ -93,9 +93,9 @@ textarea.input, .ui textarea { height:auto; min-height:128px; padding:11px 12px;
 #gnav a { color:var(--nav-ink); text-decoration:none; padding:5px 10px; border-radius:8px; }
 #gnav a:hover { background:var(--nav-on); }
 #gnav a.on { color:#fff; background:var(--nav-on); font-weight:600; }
-#gg { margin-left:auto; padding:0 8px; font:13px var(--mono); letter-spacing:0; white-space:nowrap; }
+#gg { position:absolute; top:8px; right:max(24px, calc((100% - 1192px) / 2)); font:13px var(--mono); letter-spacing:0; white-space:nowrap; }  /* 위쪽 빈 줄 오른쪽. 진행 표시는 그 아래 메뉴 줄 끝 */
 #gg.hot { color:#FFC56B; font-weight:600; }
-#gq { display:block; height:32px; color:#fff; background:var(--nav-on); border:1px solid var(--nav-line); border-radius:8px; padding:0 12px; font-size:13px; font-weight:600; cursor:pointer; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#gq { display:block; margin-left:auto; height:32px; color:#fff; background:var(--nav-on); border:1px solid var(--nav-line); border-radius:8px; padding:0 12px; font-size:13px; font-weight:600; cursor:pointer; max-width:min(100%, 260px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #gq.alarm { background:#A15C00; border-color:#C98A2E; }
 #gp { position:absolute; right:max(24px, calc((100% - 1192px) / 2)); top:100%; width:min(420px, calc(100vw - 32px)); max-height:70vh; overflow:auto; margin-top:6px; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:14px; box-shadow:0 8px 24px rgba(16,20,30,.25); }
 #gp .i { display:flex; align-items:center; gap:8px; padding:8px 0; border-top:1px solid var(--line); }
@@ -110,4 +110,4 @@ textarea.input, .ui textarea { height:auto; min-height:128px; padding:11px 12px;
 #gp .alarm { color:var(--warn); margin-bottom:8px; overflow-wrap:anywhere; }
 #gp .bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin:4px 0; }
 #gp .bar div { height:100%; background:var(--tally); }
-@media (max-width:720px) { #gnav { position:relative; padding:32px 16px 7px; } .top { top:0; } #gp { right:16px; } #gnav .logo { margin-right:6px; } .top-in { padding:0 16px; } #gg { order:5; margin-left:0; flex-basis:100%; padding:4px 0 0; } #gq { margin-left:auto; } }
+@media (max-width:720px) { #gnav { position:relative; padding:32px 16px 7px; } .top { top:0; } #gp { right:16px; } #gnav .logo { margin-right:6px; } .top-in { padding:0 16px; } #gg { right:16px; } #gq { margin-left:auto; } }

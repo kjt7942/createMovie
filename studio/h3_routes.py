@@ -5,7 +5,7 @@ from pathlib import Path
 
 from flask import Blueprint, abort, jsonify, request, send_file, send_from_directory
 
-from . import engine
+from . import batch, charmaker, engine
 
 HERE = Path(__file__).resolve().parent
 app = Blueprint("h3", __name__, url_prefix="/h3")
@@ -140,6 +140,34 @@ def delete_character(cid):
     return jsonify(ok=True)
 
 
+@app.post("/api/charmaker")
+def charmaker_front():
+    d = request.form if request.content_type and request.content_type.startswith("multipart/") else body()  # 참고 이미지가 있으면 폼으로 온다
+    refs = [f.read() for f in request.files.getlist("refs") if f.filename]
+    cid = charmaker.front(d.get("name"), d.get("description"), d.get("description_ko"), d.get("size"), d.get("count"),
+                             d.get("shot") or "sheet", d.get("background"), refs)
+    runner.enqueue_external(lambda: batch.mark_queued(cid))
+    return jsonify(id=cid)
+
+
+@app.post("/api/charmaker/<cid>/views")
+def charmaker_views(cid):
+    vb = charmaker.views(cid)
+    runner.enqueue_external(lambda: batch.mark_queued(vb))
+    return jsonify(id=vb)
+
+
+@app.post("/api/charmaker/<cid>/delete")
+def charmaker_delete(cid):
+    charmaker.delete(cid)
+    return jsonify(ok=True)
+
+
+@app.post("/api/charmaker/<cid>/register")
+def charmaker_register(cid):
+    return jsonify(charmaker.register(cid))
+
+
 @app.get("/api/characters/<cid>/image/<int:n>")
 def character_image(cid, n):
     path = engine.character_dir(cid) / f"{n}.png"
@@ -216,6 +244,57 @@ def move_in_queue():
     d = body()
     runner.move(str(d.get("kind")), str(d.get("id")), -1 if d.get("step") == -1 else 1)
     return jsonify(ok=True)
+
+
+@app.get("/api/batches")
+def batches():
+    return jsonify(batches=batch.list_all())
+
+
+@app.post("/api/batches")
+def create_batch():
+    d = body()
+    b = batch.create(str(d.get("name")), str(d.get("title") or ""), d.get("items") or [], d.get("contest", True) is not False)
+    if d.get("start"):
+        runner.enqueue_external(lambda: batch.mark_queued(b["name"]))
+    return jsonify(ok=True, name=b["name"])
+
+
+@app.get("/api/batches/models")
+def batch_models():
+    return jsonify(models=batch.models(), notice=engine.license_notice())
+
+
+@app.post("/api/batches/form")
+def create_batch_from_form():
+    name = batch.create_from_form(request.form, {k: request.files.getlist(k) for k in batch.UPLOADS})
+    runner.enqueue_external(lambda: batch.mark_queued(name))
+    return jsonify(ok=True, name=name)
+
+
+@app.post("/api/batches/<name>/start")
+def start_batch(name):
+    runner.enqueue_external(lambda: batch.mark_queued(name))
+    return jsonify(ok=True)
+
+
+@app.post("/api/batches/<name>/pick")
+def pick_item(name):
+    d = body()
+    batch.set_pick(name, str(d.get("item")), bool(d.get("on")))
+    return jsonify(ok=True)
+
+
+@app.post("/api/batches/<name>/redo")
+def redo_batch(name):
+    new, cuts = batch.redo(name)
+    runner.enqueue_external(lambda: batch.mark_queued(new["name"]))
+    return jsonify(ok=True, name=new["name"], cuts=cuts)
+
+
+@app.get("/api/batches/<name>/file/<item>")
+def batch_file(name, item):
+    return send_file(batch.output_file(name, item))
 
 
 @app.post("/api/stop")

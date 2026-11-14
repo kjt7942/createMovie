@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>캐릭터 생성 · createMovie</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+main { max-width:1200px; margin:0 auto; padding:16px; }
+form { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:24px; }
+form label { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+form .wide { grid-column:1 / -1; }
+form input, form textarea, form select { width:100%; box-sizing:border-box; }
+section { margin-bottom:32px; border-top:1px solid var(--line); padding-top:12px; }
+.head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.head h2 { margin:0; font-size:18px; }
+.desc { font-size:13px; margin:6px 0; overflow-wrap:anywhere; }
+.step { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0 4px; }
+.step h3 { margin:0; font-size:15px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin-top:8px; }
+figure { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; position:relative; }
+figure img { display:block; width:100%; aspect-ratio:480/832; object-fit:contain; background:#fff; }
+figure .ph { display:flex; align-items:center; justify-content:center; aspect-ratio:480/832; font-size:13px; }
+figure.pick { outline:3px solid #2e9e4f; }
+figure.running { outline:2px solid currentColor; }
+figcaption { padding:4px 8px; font-size:12px; overflow-wrap:anywhere; }
+.pickbox { position:absolute; top:6px; left:6px; background:#000a; color:#fff; border-radius:6px; padding:3px 8px; font-size:13px; cursor:pointer; display:flex; gap:5px; align-items:center; }
+.pickbox input { width:18px; height:18px; margin:0; cursor:pointer; }
+.err { color:#d33; }
+.ok { color:#2e9e4f; }
+.tag { font-size:12px; border:1px solid var(--line); border-radius:6px; padding:1px 6px; }
+small { opacity:.8; }
+figure img { cursor:zoom-in; }
+.drop { display:flex; align-items:center; justify-content:center; min-height:70px; margin-top:4px; border:2px dashed var(--line); border-radius:8px; font-size:13px; cursor:pointer; text-align:center; padding:8px; }
+.drop.over { border-color:#2e9e4f; background:#2e9e4f22; }
+.refs { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+.refs div { position:relative; }
+.refs img { width:80px; height:80px; object-fit:cover; border-radius:6px; border:1px solid var(--line); display:block; }
+.refs button { position:absolute; top:2px; right:2px; padding:0 6px; font-size:12px; line-height:18px; }
+#lb { position:fixed; inset:0; background:rgba(0,0,0,.88); display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; z-index:60; padding:16px; box-sizing:border-box; }
+#lb.on { display:flex; }
+#lb img { max-width:94vw; max-height:82vh; object-fit:contain; border-radius:6px; background:#fff; }
+#lb .bar { display:flex; align-items:center; gap:10px; color:#fff; font-size:14px; flex-wrap:wrap; justify-content:center; }
+#lb .bar button { background:#fff2; color:#fff; border:1px solid #fff6; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:14px; }
+</style>
+</head>
+<body class="ui">
+<script src="/nav.js"></script>
+<header class="top"><div class="top-in"><div class="brand">캐릭터 생성</div></div></header>
+<main>
+<form id="new">
+  <label>캐릭터 이름<input name="name" maxlength="40" required placeholder="예: 동이"></label>
+  <label>해상도<select name="size"><option value="draft">초안 480x832 (빠름)</option><option value="high">고화질 720x1280</option></select></label>
+  <label>구도<select name="shot"><option value="sheet">전신 캐릭터 시트 (흰 배경)</option><option value="portrait">상반신 초상 (배경 포함)</option></select></label>
+  <label>정면 시안 개수<input name="count" type="number" min="1" max="8" value="4"></label>
+  <label class="wide">캐릭터 설명 (한글, 배경을 적으면 상반신 초상의 배경으로 씁니다)<textarea name="ko" rows="3" placeholder="예: 둥근 얼굴의 7살 남자아이. 2D 만화풍. 짧은 검은 머리, 노란 우비와 빨간 장화, 파란 배낭."></textarea></label>
+  <div class="wide"><button type="button" id="toEn">영어로 다듬기</button> <small>그림체, 생김새, 옷 색을 구체적으로 적을수록 좋습니다. 성격은 표정·자세로 바뀌고, 배경은 상반신 초상에서만 씁니다.</small></div>
+  <label class="wide">영어 설명 (Wan2GP와 AI 영상 생성에 쓰임, 고쳐도 됩니다)<textarea name="description" rows="4" required></textarea></label>
+  <div class="wide"><span style="font-size:13px">참고 이미지 (선택, 최대 3장. 넣으면 이 생김새·그림체를 따라 만듭니다)</span>
+    <label id="drop" class="drop">여기에 이미지를 끌어다 놓거나 눌러서 고르세요<input name="refs" type="file" multiple accept=".png,.jpg,.jpeg,.webp" hidden></label>
+    <div id="refList" class="refs"></div></div>
+  <label class="wide" id="bgRow" hidden>배경 (영어, 상반신 초상에서만 씀)<input name="background" placeholder="softly blurred server racks and clouds"></label>
+  <div class="wide"><button type="submit">정면 시안 만들기</button> <small>대기열에 들어가 차례가 되면 만듭니다. 한 장에 약 2~3분 걸립니다.</small></div>
+</form>
+<p><small>순서: ① 정면 시안 중 하나 고르기 → ② 다른 시점(옆·뒤·포즈) 만들기 → ③ 시점마다 하나씩 고르고 등록. 등록한 캐릭터는 <a href="/h3/">AI 영상 생성</a>의 캐릭터 목록에 나타납니다.</small></p>
+<div id="list" aria-live="polite"></div>
+</main>
+<div id="lb" role="dialog" aria-modal="true" aria-label="이미지 크게 보기"><img alt=""><div class="bar"><button id="lbp">← 이전</button><span id="lbt"></span><button id="lbn">다음 →</button><button id="lbk"></button><button id="lbc">닫기 (Esc)</button></div></div>
+<script>
+const WORD = { ready: '대기 전', queued: '대기열에 있음', running: '생성 중', done: '완료', error: '문제 있음', stopped: '멈춤' };
+const ITEM = { pending: '대기', running: '생성 중', failed: '실패' };
+const VIEW = { front: '정면', side: '옆', back: '뒤', pose: '포즈' };
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; };
+const post = (url, data) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) })
+  .then(r => r.json()).catch(() => ({ error: '서버 연결 끊김' }));
+const form = document.getElementById('new'), list = document.getElementById('list');
+
+document.getElementById('toEn').onclick = async e => {
+  e.target.disabled = true; e.target.textContent = '다듬는 중…';
+  const r = await post('/api/character_english', { text: form.ko.value });
+  e.target.disabled = false; e.target.textContent = '영어로 다듬기';
+  if (r.error) return alert(r.error);
+  form.description.value = r.description;
+  if (r.background) form.background.value = r.background;
+};
+// 참고 이미지: 끌어다 놓기·고르기가 쌓이고, 썸네일에서 뺄 수 있다. 실제 파일은 refs 배열이 갖는다.
+let refs = [];
+const drop = document.getElementById('drop'), refList = document.getElementById('refList');
+function addRefs(files) {
+  const ok = [...files].filter(f => /\.(png|jpe?g|webp)$/i.test(f.name) || /^image\/(png|jpeg|webp)$/.test(f.type));
+  if (ok.length < files.length) alert('PNG, JPG, WEBP 이미지만 넣을 수 있습니다.');
+  refs = [...refs, ...ok];
+  if (refs.length > 3) { alert('참고 이미지는 3장까지입니다. 앞의 3장만 씁니다.'); refs = refs.slice(0, 3); }
+  drawRefs();
+}
+function drawRefs() {
+  refList.replaceChildren(...refs.map((f, k) => {
+    const d = el('div'), img = el('img'), x = el('button', '×');
+    img.src = URL.createObjectURL(f); img.alt = f.name; img.title = f.name; img.onload = () => URL.revokeObjectURL(img.src);
+    x.type = 'button'; x.title = '빼기'; x.setAttribute('aria-label', `${f.name} 빼기`);
+    x.onclick = () => { refs.splice(k, 1); drawRefs(); };
+    d.append(img, x); return d;
+  }));
+}
+form.refs.onchange = () => { addRefs(form.refs.files); form.refs.value = ''; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addRefs(e.dataTransfer.files); };
+form.shot.onchange = () => { document.getElementById('bgRow').hidden = form.shot.value !== 'portrait'; };
+form.onsubmit = async e => {
+  e.preventDefault();
+  const btn = form.querySelector('[type=submit]'); btn.disabled = true;
+  const fd = new FormData();
+  for (const [k, v] of Object.entries({ name: form.name.value, description: form.description.value, description_ko: form.ko.value, size: form.size.value, count: form.count.value, shot: form.shot.value, background: form.background.value })) fd.append(k, v);
+  for (const f of refs) fd.append('refs', f);
+  const r = await fetch('/h3/api/charmaker', { method: 'POST', body: fd }).then(x => x.json()).catch(() => ({ error: '서버 연결 끊김' }));
+  btn.disabled = false;
+  if (r.error) return alert(r.error);
+  refs = []; drawRefs();
+  last = ''; refresh();
+};
+
+const busy = b => b && ['queued', 'running'].includes(b.state);
+const viewOf = n => n.replace(/_s\d+$/, '');
+async function pick(b, i, on) {  // 정면·시점마다 하나만: 새로 고르면 같은 묶음의 다른 선택을 푼다
+  const others = on ? b.items.filter(x => x !== i && x.pick && viewOf(x.name) === viewOf(i.name)) : [];
+  for (const x of [...others.map(x => [x, false]), [i, on]]) {
+    const r = await post(`/h3/api/batches/${b.name}/pick`, { item: x[0].name, on: x[1] });
+    if (r.error) { alert(r.error); break; }
+    x[0].pick = x[1];
+  }
+  if (lb.classList.contains('on')) paintLb();
+  last = ''; refresh();
+}
+// 그 화면에서 크게 보기: ←/→ 이동, Space 선택, Esc 닫기
+let shots = [], at = 0;
+const lb = document.getElementById('lb'), fileUrl = (b, i) => `/h3/api/batches/${b.name}/file/${i.name}?t=${encodeURIComponent(i.output)}`;
+function show(k) {
+  at = (k + shots.length) % shots.length;
+  const { b, i } = shots[at];
+  lb.querySelector('img').src = fileUrl(b, i);
+  document.getElementById('lbt').textContent = `${b.character ? b.character.name : b.title} · ${VIEW[viewOf(i.name)] || i.name} · 시드 ${i.job.seed ?? '-'} · ${at + 1}/${shots.length}`;
+  lb.classList.add('on'); paintLb(); document.getElementById('lbc').focus();
+}
+function paintLb() { document.getElementById('lbk').textContent = shots[at].i.pick ? '★ 선택됨 (Space로 해제)' : '☆ 선택 (Space)'; }
+const closeLb = () => lb.classList.remove('on');
+const toggleLb = () => { const { b, i } = shots[at]; pick(b, i, !i.pick); };
+document.getElementById('lbp').onclick = () => show(at - 1);
+document.getElementById('lbn').onclick = () => show(at + 1);
+document.getElementById('lbk').onclick = toggleLb;
+document.getElementById('lbc').onclick = closeLb;
+lb.onclick = e => { if (e.target === lb) closeLb(); };
+document.addEventListener('keydown', e => {
+  if (!lb.classList.contains('on')) return;
+  if (e.key === 'Escape') closeLb(); else if (e.key === 'ArrowLeft') show(at - 1); else if (e.key === 'ArrowRight') show(at + 1);
+  else if (e.key === ' ') { e.preventDefault(); toggleLb(); }
+});
+function grid(b) {
+  const g = el('div', '', 'grid');
+  b.items.forEach(i => {
+    const f = el('figure', '', [i.status === 'running' ? 'running' : '', i.pick ? 'pick' : ''].join(' ').trim());
+    if (i.status === 'done' && i.output) {
+      const url = `/h3/api/batches/${b.name}/file/${i.name}?t=${encodeURIComponent(i.output)}`;
+      const img = el('img'); img.src = url; img.alt = i.name; img.loading = 'lazy'; img.title = '클릭하면 크게 봅니다';
+      img.onclick = () => { shots = b.items.filter(x => x.status === 'done' && x.output).map(x => ({ b, i: x })); show(shots.findIndex(x => x.i === i)); };
+      f.append(img);
+      const lab = el('label', '', 'pickbox'), cb = el('input'); cb.type = 'checkbox'; cb.checked = !!i.pick;
+      cb.onchange = () => pick(b, i, cb.checked);
+      lab.append(cb, document.createTextNode('선택')); f.append(lab);
+    } else f.append(el('div', ITEM[i.status] || i.status, 'ph'));
+    f.append(el('figcaption', `${VIEW[viewOf(i.name)] || i.name} · 시드 ${i.job.seed ?? '-'}`));
+    if (i.error) f.append(el('figcaption', i.error, 'err'));
+    g.append(f);
+  });
+  return g;
+}
+function status(b) {
+  const done = b.items.filter(i => i.status === 'done').length;
+  const s = el('span', `${WORD[b.state] || b.state} · ${done}/${b.items.length}`);
+  const out = [s];
+  if (!busy(b) && done < b.items.length) {
+    const go = el('button', done ? '이어서 생성' : '생성 시작');
+    go.onclick = async () => { go.disabled = true; const r = await post(`/h3/api/batches/${b.name}/start`); if (r.error) alert(r.error); last = ''; refresh(); };
+    out.push(go);
+  }
+  return out;
+}
+let last = '';
+async function refresh() {
+  if (document.hidden) return;
+  let data;
+  try { data = await fetch('/h3/api/batches').then(r => r.json()); } catch { return; }
+  const text = JSON.stringify(data);
+  if (text === last) return;
+  last = text;
+  const byName = Object.fromEntries(data.batches.map(b => [b.name, b]));
+  const drafts = data.batches.filter(b => b.character).reverse();
+  list.replaceChildren();
+  if (!drafts.length) list.append(el('p', '아직 만든 캐릭터 시안이 없습니다.'));
+  drafts.forEach(b => {
+    const c = b.character, vb = byName[c.views], s = el('section'), head = el('div', '', 'head');
+    head.append(el('h2', c.name));
+    if (c.registered) { const t = el('span', '등록됨', 'tag ok'); head.append(t); }
+    const del = el('button', '삭제');
+    del.disabled = busy(b) || busy(vb);
+    del.title = del.disabled ? '생성 중이거나 대기 중이면 지울 수 없습니다' : '이 시안과 시점 시안을 모두 지웁니다';
+    del.onclick = async () => {
+      if (!confirm(`'${c.name}' 시안(정면${vb ? '·다른 시점' : ''})을 모두 지웁니다. 되돌릴 수 없습니다.${c.registered ? '\n\n이미 등록한 캐릭터는 남습니다. 지우려면 AI 영상 생성의 캐릭터 목록에서 지우세요.' : ''}`)) return;
+      del.disabled = true; const r = await post(`/h3/api/charmaker/${b.name}/delete`);
+      if (r.error) alert(r.error);
+      last = ''; refresh();
+    };
+    head.append(del);
+    s.append(head);
+    if (c.description_ko) s.append(el('p', c.description_ko, 'desc'));
+    s.append(el('p', c.description, 'desc'));
+    if (b.message && b.state === 'error') s.append(el('p', b.message, 'err'));
+
+    const st1 = el('div', '', 'step'); st1.append(el('h3', '① 정면'), ...status(b));
+    const front = b.items.find(i => i.pick && i.status === 'done');
+    const mk = el('button', vb ? '고른 정면으로 다른 시점 다시 만들기' : '② 고른 정면으로 다른 시점 만들기');
+    mk.disabled = !front || busy(vb);
+    mk.title = front ? '' : '정면 시안을 하나 고르세요';
+    mk.onclick = async () => {
+      if (vb && !confirm('지금 시점 시안을 새로 만든 것으로 바꿉니다. 진행할까요?')) return;
+      mk.disabled = true; const r = await post(`/h3/api/charmaker/${b.name}/views`); if (r.error) alert(r.error); last = ''; refresh();
+    };
+    st1.append(mk); s.append(st1, grid(b));
+
+    if (vb) {
+      const st2 = el('div', '', 'step'); st2.append(el('h3', '② 다른 시점'), ...status(vb));
+      if (vb.message && vb.state === 'error') st2.append(el('span', vb.message, 'err'));
+      s.append(st2, grid(vb));
+    }
+    const st3 = el('div', '', 'step'), reg = el('button', c.registered ? '다시 등록 (새 캐릭터로)' : '③ 캐릭터로 등록');
+    const picked = vb ? vb.items.filter(i => i.pick && i.status === 'done').map(i => VIEW[viewOf(i.name)]) : [];
+    reg.disabled = !front;
+    reg.onclick = async () => {
+      if (!confirm(`정면${picked.length ? ', ' + picked.join(', ') : ''} 이미지로 '${c.name}'을(를) 등록합니다.`)) return;
+      reg.disabled = true; const r = await post(`/h3/api/charmaker/${b.name}/register`);
+      if (r.error) alert(r.error); else alert(`등록했습니다. AI 영상 생성의 캐릭터 목록에서 고를 수 있습니다.`);
+      last = ''; refresh();
+    };
+    st3.append(reg, el('small', `등록에 쓰일 이미지: 정면${picked.length ? ', ' + picked.join(', ') : ''} (시점마다 하나씩 고르세요. 고르지 않은 시점은 빠집니다.)`));
+    s.append(st3);
+    list.append(s);
+  });
+}
+refresh(); setInterval(refresh, 3000);
+document.addEventListener('visibilitychange', refresh);
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
   const path = location.pathname, on = p => (p === '/' ? path === '/' : path.startsWith(p)) ? 'on' : '';
   const bar = document.createElement('nav');
   bar.id = 'gnav'; bar.setAttribute('aria-label', '서비스');
-  bar.innerHTML = `<a class="logo" href="/" aria-label="createMovie"><i></i><span class="w" aria-hidden="true">c<span class="a">rea<b class="p k"><u>♪</u>크</b></span>te<span class="a">Mov<b class="p m">무<u>♫</u></b></span>ie</span></a><a class="${on('/')}" href="/">홍보 영상(HyperFrames)</a><a class="${on('/h3')}" href="/h3/">AI 영상 생성(Wan2GP)</a><a class="${on('/setup')}" href="/setup">설치·점검</a><a class="${on('/guide')}" href="/guide">사용법</a>
+  bar.innerHTML = `<a class="logo" href="/" aria-label="createMovie"><i></i><span class="w" aria-hidden="true">c<span class="a">rea<b class="p k"><u>♪</u>크</b></span>te<span class="a">Mov<b class="p m">무<u>♫</u></b></span>ie</span></a><a class="${on('/')}" href="/">홍보 영상(HyperFrames)</a><a class="${on('/h3')}" href="/h3/">AI 영상 생성(Wan2GP)</a><a class="${on('/characters')}" href="/characters">캐릭터 생성</a><a class="${on('/batch')}" href="/batch">콘텐츠 생성</a><a class="${on('/setup')}" href="/setup">설치·점검</a><a class="${on('/guide')}" href="/guide">사용법</a>
     <span id="gg" title="그래픽카드 온도, 전력, 메모리, 팬"></span><button id="gq" aria-expanded="false" aria-controls="gp">대기열 확인 중</button><div id="gp" hidden></div>`;
   document.body.prepend(bar);
   const setHeight = () => document.documentElement.style.setProperty('--nav-h', window.innerWidth <= 720 ? '0px' : `${bar.offsetHeight}px`);  // 화면별 고정 머리글이 이 막대 아래에 붙게
@@ -16,8 +16,8 @@
     gpu.className = g.temp >= 88 ? 'hot' : '';
     gpu.textContent = `GPU ${val(g.temp, Math.round)}°C · ${val(g.power, Math.round)}W/${val(g.limit, Math.round)}W · ${val(g.mem, v => (v / 1024).toFixed(1))}GB · 팬 ${val(g.fan, Math.round)}%`;
   }
-  const KIND = { h3: 'AI 영상', promo: '홍보 영상' };
-  const link = x => (x.kind === 'h3' ? `/h3/?open=${x.id}` : `/?open=${x.id}`);
+  const KIND = { h3: 'AI 영상', promo: '홍보 영상', batch: '콘텐츠 생성' };
+  const link = x => (x.kind === 'h3' ? `/h3/?open=${x.id}` : x.kind === 'batch' ? '/batch' : `/?open=${x.id}`);
   const mins = s => { const m = Math.round((s || 0) / 60); return m >= 60 ? `약 ${Math.floor(m / 60)}시간 ${m % 60}분` : `약 ${Math.max(1, m)}분`; };
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text) e.textContent = text; if (cls) e.className = cls; return e; };
   const act = async (path, body) => {

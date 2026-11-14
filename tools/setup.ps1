@@ -72,7 +72,7 @@ if (-not $hasKey -and -not $env:GEMINI_API_KEY) {
 
 $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'createMovie.lnk'
 $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
-$s.TargetPath = Join-Path $root 'start.bat'
+$s.TargetPath = Join-Path $root 'start.vbs'
 $s.WorkingDirectory = $root
 $s.Save()
 Write-Host '바탕화면에 createMovie 바로가기를 만들었습니다.' -ForegroundColor Green
