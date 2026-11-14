@@ -200,6 +200,7 @@
   .trow { display:flex; gap:6px; align-items:center; margin-bottom:4px; }
   .trow .typesel { flex:1; max-width:none; }
   .vbtn { white-space:nowrap; }
+  .lenrow { flex-wrap:wrap; margin:2px 0 6px; } .lenrow .lbl { margin:0 2px 0 0; } .lenrow b { min-width:52px; text-align:center; font-weight:500; }
   .numrow { display:grid; grid-template-columns:2fr 1fr; gap:10px; }
   .numrow .ed { margin:0; width:100%; }
   .cstrip { display:flex; gap:6px; flex-wrap:wrap; }
@@ -407,6 +408,7 @@
     <div class="alert" id="e2" role="alert"></div>
     <div class="actions">
       <button class="btn ghost" data-go="1">← 자료</button><span class="sp"></span>
+      <button class="btn ghost" id="regen" hidden title="지금까지 고친 구성을 버리고 AI가 처음부터 다시 만듭니다">AI로 구성 다시 만들기</button>
       <button class="btn primary" id="to3">AI 구성 만들기 →</button>
     </div>
   </section>
@@ -414,7 +416,7 @@
   <!-- ③ 구성 확인 -->
   <section id="s3" hidden>
     <div class="head"><h1>구성을 확인하고 다듬어 주세요</h1>
-      <p>글자를 눌러 바로 고치고, 사진을 눌러 바꾸고, 카드를 끌어 순서를 바꿀 수 있습니다.</p></div>
+      <p>글자를 눌러 바로 고치고, 사진을 눌러 바꾸고, 카드를 끌어 순서를 바꿀 수 있습니다. 장면 카드의 <b>길이 －＋</b>로 장면마다 시간을 조절할 수 있어요 (영상 전체 길이는 그대로, 나머지 장면이 그만큼 줄거나 늘어납니다).</p></div>
     <div class="panel">
       <div class="ruler" id="ruler"></div>
       <div class="ticks mono" id="ticks"></div>
@@ -424,7 +426,8 @@
         <span style="color:var(--mute);font-size:13px">다시 배치:</span>
         <button class="btn sm" data-reorder="time" title="장면 순서를 사진 촬영 시각 순으로 바꿉니다">촬영 시간순</button>
         <button class="btn sm" data-reorder="random" title="장면 순서를 무작위로 섞습니다">무작위</button>
-        <button class="btn sm" data-reorder="manual" title="장면 대표 사진을 올린 순서로 놓습니다">올린 순서</button></div>
+        <button class="btn sm" data-reorder="manual" title="장면 대표 사진을 올린 순서로 놓습니다">올린 순서</button>
+        <button class="btn sm" id="evenLen" title="장면 길이를 모두 같게 되돌립니다">길이 균등</button></div>
     </div>
     <div class="panel">
       <div class="panel-h"><h2>연출 스타일</h2><span>바꾸면 글꼴·색·움직임이 통째로 바뀌어요 · 미리보기로 확인해 보세요</span></div>
@@ -438,6 +441,12 @@
       </div>
     </div>
     <div class="panel">
+      <div class="panel-h"><h2>소리</h2><span>내레이션이 잘 안 들리면 배경음악을 줄이거나 내레이션을 꺼 보세요 · 장면 구성은 그대로 유지됩니다</span></div>
+      <label class="switch"><input type="checkbox" id="narrOn3">한국어 내레이션 넣기 <small style="color:var(--mute)">목소리·속도는 요구사항 화면에서</small></label>
+      <div class="field" id="bgmRow" style="margin-top:14px" hidden><span>배경음악 크기</span>
+        <div class="seg" id="bgmVol"><button data-b="0">끄기</button><button data-b="0.07">작게</button><button data-b="" aria-pressed="true">보통 <small>(내레이션 있으면 자동으로 낮춤)</small></button><button data-b="0.3">크게</button></div></div>
+    </div>
+    <div class="panel">
       <div class="panel-h"><h2>AI에게 수정 요청</h2><span>바꿀 장면 번호와 내용을 함께 적으면 정확해요</span></div>
       <div class="revise"><input class="input" id="revise" placeholder="예) 3번 장면 제목을 '아이돌봄'으로, 엔딩은 감사 인사로">
         <button class="btn" id="redo">수정 요청</button></div>
@@ -449,8 +458,8 @@
     </div>
     <div class="actions">
       <button class="btn ghost" data-go="2">← 요구사항</button><span class="sp"></span>
-      <button class="btn" id="toPreview">▶ 미리보기</button>
-      <button class="btn primary" id="to4">영상 만들기 →</button>
+      <button class="btn primary" id="toPreview" title="미리보기로 확인한 뒤, 그 화면에서 영상 만들기를 누를 수 있어요">▶ 미리보기 후 영상 만들기</button>
+      <button id="to4" style="display:none" tabindex="-1" aria-hidden="true"></button>
     </div>
   </section>
 
@@ -532,7 +541,7 @@ function go(n) {
   $$('#stepper button').forEach(b => { const i = +b.dataset.step;
     b.className = i === n ? 'on' : i <= reached ? 'done' : '';
     b.disabled = i !== n && (i > reached || (i === 4 && !$('#video').src)); b.setAttribute('aria-current', i === n ? 'step' : 'false'); });
-  if (n === 2) { initMusic(); narrUI(); }
+  if (n === 2) { initMusic(); narrUI(); to3UI(); }
   window.scrollTo({top: 0});
 }
 $$('#stepper button').forEach(b => b.onclick = () => go(+b.dataset.step));
@@ -565,7 +574,7 @@ function showConflict(on = true) {
   if (on) $('#saved').textContent = '저장 안 됨 · 다른 곳에서 바뀜';
 }
 function settings() {
-  return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
+  return {brief: $('#brief').value, org: $('#org').value, mood: mood(), style: styleSel(), ratio: ratio(), narr: narrSel(), bgm: bgmSel(), length: lengthSec(), lenAuto: $('#lenAuto').checked,
           aStart: +aStart.toFixed(2), aEnd: +aEnd.toFixed(2), beatSync: $('#beatSync').checked, blur: $('#blurOn').checked, logo: logoMode(), disc: discOut(), progress: $('#progOn').checked, order: orderMode()};
 }
 function dirty() {   // 바뀔 때마다 1.2초 뒤 자동 저장
@@ -602,6 +611,7 @@ async function openProject(j) {
   press('#mood', $$('#mood button').find(b => b.textContent === st.mood) || $('#mood button'));
   press('#ratio', $$('#ratio button').find(b => b.dataset.r === st.ratio) || $('#ratio button')); applyRatio();
   press('#style', $$('#style button').find(b => b.dataset.st === (st.style || '')) || $('#style button'));
+  press('#bgmVol', $$('#bgmVol button').find(b => b.dataset.b === (st.bgm == null ? '' : String(st.bgm))) || $$('#bgmVol button')[2]);
   const nr = st.narr || {}; $('#narrOn').checked = !!nr.on; $('#narrOpts').hidden = !nr.on;
   press('#voice', $$('#voice button').find(b => b.dataset.v === nr.voice) || $('#voice button'));
   press('#rate', $$('#rate button').find(b => +b.dataset.rate === nr.rate) || $('#rate button'));
@@ -627,7 +637,7 @@ function newProject() {
   job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
   $('#video').removeAttribute('src'); $('#brief').value = ''; $('#org').value = ORG_DEFAULT; $('#logoDef').checked = true; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#progOn').checked = false; setOrder('ai'); $('#subOn').checked = true; discIn('');
   press('#logoMode', $('#logoMode button'));
-  press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true;
+  press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true; press('#bgmVol', $$('#bgmVol button')[2]);
   $('#saved').textContent = ''; $('#projDlg').open && $('#projDlg').close();
   renderAssets(); go(1);
 }
@@ -793,20 +803,23 @@ $$('#ratio button').forEach(b => b.onclick = () => { press('#ratio', b); applyRa
 const CPS = 4.6;   // server.py와 같은 값: 보통 속도 초당 글자 수(공백 제외)
 const narrSel = () => ({on: $('#narrOn').checked, voice: $('#voice [aria-pressed="true"]').dataset.v, rate: +$('#rate [aria-pressed="true"]').dataset.rate, sub: $('#subOn').checked});
 $('#subOn').onchange = () => dirty();
-function narrSlots(L, n) {   // server.py narr_slots()와 같은 계산
-  const {starts, os} = snapTimes(L, n), nexts = [...starts.slice(1), os];
-  return [[0.5, starts[0] - 0.1], ...starts.map((a, i) => [a + 0.4, nexts[i] - 0.1]), [os + 0.5, L - 0.3]];
+function narrSlots(L, n, ws) {   // server.py narr_slots()와 같은 계산
+  const {starts, os} = snapTimes(L, n, ws), nexts = [...starts.slice(1), os];
+  return [[0.5, starts[0] - 0.1], ...starts.map((a, i) => [a + (i ? 0.4 : 0.9), nexts[i] - 0.1]), [os + 0.5, L - 0.3]];   // 첫 장면은 오프닝이 끝난 뒤(+0.9)
 }
 const narrCap = ([a, b]) => Math.max(4, Math.floor((b - a - 0.6) * CPS * (1 + narrSel().rate / 100)));
 function narrUI() {
   const on = narrSel().on; $('#narrOpts').hidden = !on;
   const folders = new Set(meta.photos.map(p => p.folder).filter(Boolean)).size;
   const n = plan ? plan.scenes.length : Math.max(3, Math.min(folders || 3, Math.floor((lengthSec() - 8) / 2.2)));
-  const sec = (lengthSec() - 8) / n, cap = narrCap(narrSlots(lengthSec(), n)[1]);
+  const sec = (lengthSec() - 8) / n, cap = narrCap(narrSlots(lengthSec(), n, plan ? plan.scenes.map(s => s.w) : undefined)[1]);
   $('#narrHint').textContent = `장면 ${n}개 기준 장면당 약 ${sec.toFixed(1)}초 · 한 장면에 ${cap}자 정도 읽을 수 있어요` + (cap < 12 ? ' — 설명을 더 넣으려면 영상 길이를 늘려 주세요' : '');
   if (plan && step === 3) renderPlan();
 }
 $('#narrOn').onchange = () => { narrUI(); dirty(); };
+$('#narrOn3').onchange = () => { $('#narrOn').checked = $('#narrOn3').checked; $('#narrOn').onchange(); };   // 구성 화면에서도 켜고 끄기
+const bgmSel = () => { const v = $('#bgmVol [aria-pressed="true"]').dataset.b; return v === '' ? null : +v; };
+$$('#bgmVol button').forEach(b => b.onclick = () => { press('#bgmVol', b); dirty(); });
 ['#voice', '#rate'].forEach(g => $$(g + ' button').forEach(b => b.onclick = () => { press(g, b); narrUI(); dirty(); }));
 $('#length').addEventListener('input', () => narrUI());
 const sayer = new Audio();
@@ -918,8 +931,18 @@ function audioSel() {  // 서버로 보낼 음악 구간: 시작 위치, 쓸 길
   return {start: +aStart.toFixed(2), dur: Math.max(1, Math.min(lengthSec(), aDur - aStart)), sync: $('#beatSync').checked};
 }
 // 장면 시작 시각: beats.py snap_times()와 같은 규칙(장면 전환을 가까운 비트, 가능하면 마디 첫 박으로)
-function snapTimes(L, n) {
-  const step = (L - 8) / n, base = [...Array.from({length: n}, (_, i) => 3.6 + step * i), 3.6 + step * n];
+function sceneSteps(L, ws) {   // beats.py scene_steps()와 같은 계산: 오프닝·엔딩을 뺀 시간을 비중대로 나누되 장면당 최소 2.4초
+  const n = ws.length, tot = L - 8, lo = 2.4, w = ws.map(x => Math.min(20, Math.max(0.5, +x || 1))), fixed = new Set();
+  const part = () => { const free = w.map((_, i) => i).filter(i => !fixed.has(i)), rem = tot - lo * fixed.size; return {free, rem, sw: free.reduce((a, i) => a + w[i], 0)}; };
+  while (n && tot >= lo * n) {
+    const {free, rem, sw} = part(), bad = free.filter(i => rem * w[i] / sw < lo - 1e-9);
+    if (!bad.length) break; bad.forEach(i => fixed.add(i));
+  }
+  const {rem, sw} = part();
+  return w.map((x, i) => fixed.has(i) ? lo : rem * x / sw);
+}
+function snapTimes(L, n, ws) {
+  const steps = sceneSteps(L, ws || Array(n).fill(1)), base = Array.from({length: n + 1}, (_, i) => 3.6 + steps.slice(0, i).reduce((a, x) => a + x, 0));
   const r2 = v => Math.round(v * 100) / 100, plain = {starts: base.slice(0, n).map(r2), os: r2(base[n])};
   const b = meta.beats, a = audioSel();
   if (!b || !a || !a.sync || n < 1) return plain;
@@ -929,6 +952,7 @@ function snapTimes(L, n) {
   const ib = bt.slice(1).map(([t], i) => t - bt[i][0]).sort((x, y) => x - y)[Math.floor(bt.length / 2)];
   const out = []; let last = 0;
   base.forEach((want, k) => {
+    const step = steps[Math.min(k, n - 1)];
     let lo = last + (k ? 2.4 : 2.6); const hi = k === n ? L - 3.4 : want + Math.min(step * 0.45, 2 * ib);
     if (k === n) lo = Math.max(lo, L - 5.6);
     const c = bt.filter(([t]) => t >= lo && t <= hi && Math.abs(t - want) <= Math.max(step * 0.45, ib));
@@ -945,11 +969,11 @@ function snapTimes(L, n) {
 }
 
 // ---------- ②→③ AI 구성 ----------
-async function ask(revise) {
+async function ask(revise, trigger) {
   $('#e2').textContent = $('#e3').textContent = '';
   if (!(lengthSec() >= 15 && lengthSec() <= 600)) { $('#e2').textContent = '영상 길이를 15~600초 사이로 입력해 주세요.'; return; }
-  const btns = [$('#to3'), $('#redo')]; btns.forEach(b => b.disabled = true);
-  const busy = revise ? $('#redo') : $('#to3'), old = busy.innerHTML;   // 지금 누른 버튼에 진행 표시
+  const btns = [$('#to3'), $('#redo'), $('#regen')]; btns.forEach(b => b.disabled = true);
+  const busy = trigger || (revise ? $('#redo') : $('#to3')), old = busy.innerHTML;   // 지금 누른 버튼에 진행 표시
   busy.innerHTML = `<span class="spin"></span>${revise ? '수정하는 중' : 'AI가 사진을 살펴보는 중'}`; $('#note').textContent = '';
   const prevPlan = revise ? structuredClone(plan) : null;
   await saveNow();
@@ -959,6 +983,7 @@ async function ask(revise) {
   if (r.error) { (revise ? $('#e3') : $('#e2')).textContent = r.error; return; }
   await saving; rev = r.rev;   // 기다리는 동안 자동 저장이 돌았어도 서버의 마지막 값은 이 응답이다
   plan = r.plan; $('#video').removeAttribute('src');
+  if (prevPlan && prevPlan.scenes.length === plan.scenes.length) plan.scenes.forEach((s, i) => { if (prevPlan.scenes[i].w) s.w = prevPlan.scenes[i].w; });   // 수정 요청이 장면 길이를 지우지 않게
   if (step !== 3) go(3);
   renderPlan();
   if (revise) {   // 무엇이 바뀌었는지 알려주고 해당 카드를 깜빡인다
@@ -976,14 +1001,27 @@ async function ask(revise) {
   if (r.usage) { $('#usage').hidden = false; $('#usage').textContent = `AI 사용량 ${r.usage.totalTokenCount.toLocaleString()} 토큰 (입력 ${r.usage.promptTokenCount.toLocaleString()} · 출력 ${r.usage.candidatesTokenCount.toLocaleString()})`; }
   summary();
 }
-$('#to3').onclick = () => ask('');
+$('#to3').onclick = () => { if (plan) { renderPlan(); go(3); } else ask(''); };   // 이미 만든 구성은 그대로 두고 돌아간다
+$('#regen').onclick = () => { if (confirm('지금까지 고친 장면 구성이 모두 사라지고, AI가 처음부터 다시 만듭니다. 계속할까요?')) ask('', $('#regen')); };
+function to3UI() { $('#to3').textContent = plan ? '구성으로 돌아가기 →' : 'AI 구성 만들기 →'; $('#regen').hidden = !plan; }
 $('#redo').onclick = () => $('#revise').value.trim() ? ask($('#revise').value.trim()) : ($('#e3').textContent = '수정할 내용을 적어 주세요.', $('#revise').focus());
 $('#revise').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) $('#redo').click(); });
 $$('#reviseChips .chip').forEach(c => c.onclick = () => { $('#revise').value = c.textContent; $('#revise').focus(); });
 
 // ---------- ③ 스토리보드 ----------
+const vidDur = s => { const p = meta.photos.find(x => x.id === s.photo); return p && p.kind === 'video' ? +p.dur || 0 : 0; };
+function setLen(i, d, fit) {   // 장면 i를 d초로: 전체 길이는 그대로 두고 다른 장면의 비중대로 나머지 시간을 나눈다
+  const n = plan.scenes.length, tot = lengthSec() - 8, max = tot - 2.4 * (n - 1);
+  if (n < 2 || !(d > 0)) return;
+  const dd = Math.min(max, Math.max(2.4, d)), So = plan.scenes.reduce((a, s, j) => j === i ? a : a + Math.min(20, Math.max(0.5, s.w || 1)), 0);
+  plan.scenes[i].w = Math.round(dd * So / (tot - dd) * 100) / 100;
+  renderPlan(); dirty();
+  $('#note').className = 'okmsg neutral';
+  $('#note').textContent = fit && d > max + 0.05 ? `동영상이 ${d.toFixed(0)}초라 전부 보여 줄 수 없어요. 영상 길이를 늘리면 더 길게 쓸 수 있습니다 (지금은 최대 ${max.toFixed(1)}초).` : '';
+}
+$('#evenLen').onclick = () => { plan.scenes.forEach(s => delete s.w); renderPlan(); dirty(); $('#note').className = 'okmsg'; $('#note').textContent = '장면 길이를 모두 같게 되돌렸습니다.'; };
 function timing() {   // server.py scene_timing()과 같은 계산. ends: 다음 장면 전환 시각
-  const L = lengthSec(), n = plan.scenes.length, {starts, os} = snapTimes(L, n);
+  const L = lengthSec(), n = plan.scenes.length, {starts, os} = snapTimes(L, n, plan.scenes.map(s => s.w));
   return {L, st: (os - starts[0]) / n, starts, os, ends: [...starts.slice(1), os]};
 }
 // 장면 유형 (server.py normalize_scene / composer.py와 같은 이름)
@@ -1026,7 +1064,7 @@ function sceneFields(s, i) {
   return `${inp('ttl', 't', '장면 제목', '제목')}${inp('sub', 's', '설명 한 줄', '설명')}${strip}`;
 }
 function renderPlan() {
-  applyRatio();
+  applyRatio(); $('#narrOn3').checked = narrSel().on; $('#bgmRow').hidden = !meta.audio;
   const {L, st, starts, os, ends} = timing(), used = new Set(plan.scenes.map(s => s.photo));
   const blocks = [{k:'intro', w:starts[0], t:'오프닝', io:1}, ...plan.scenes.map((s, i) => ({k:i, w:ends[i] - starts[i], t:`${i + 1} ${sName(s)}`})), {k:'outro', w:L - os, t:'엔딩', io:1}];
   $('#ruler').innerHTML = blocks.map(b => `<button style="flex:${b.w}" class="${b.io ? 'io' : ''}" data-jump="${b.k}" title="${esc(b.t)}">${esc(b.t)}</button>`).join('');
@@ -1036,10 +1074,14 @@ function renderPlan() {
   $$('#ruler [data-jump]').forEach(b => b.onclick = () => { const el = $(`[data-card="${b.dataset.jump}"]`); el.scrollIntoView({behavior:'smooth', block:'center'}); el.querySelector('input').focus({preventScroll:true}); });
   const tc = (a, b) => `<span class="tc mono">${fmt(a)} – ${fmt(b)}</span>`;
   const isV = id => (meta.photos.find(p => p.id === id) || {}).kind === 'video';
+  const lenRow = (s, i) => {   // 장면 길이 조절: ±1초, 동영상이면 클립 전체 길이에 맞추기
+    const d = ends[i] - starts[i], v = vidDur(s), off = plan.scenes.length < 2 ? 'disabled' : '';
+    return `<div class="trow lenrow"><span class="lbl">길이</span><button class="btn sm" data-wm="${i}:-1" aria-label="${i + 1}번 장면 1초 줄이기" ${off}>－</button><b class="mono">${d.toFixed(1)}초</b><button class="btn sm" data-wm="${i}:1" aria-label="${i + 1}번 장면 1초 늘리기" ${off}>＋</button>${v && !off ? `<button class="btn sm" data-wfit="${i}" title="동영상을 처음부터 끝까지 보여 주도록 장면 길이를 맞춥니다">동영상 전체 ${v.toFixed(0)}초</button>` : ''}</div>`;
+  };
   const photoBtn = (id, slot) => `<button class="thumb" data-pick="${slot}" aria-label="사진 바꾸기"><img src="${thumb(id)}" alt="">${isV(id) ? '<b class="vb">▶ 동영상</b>' : ''}<span class="swap">사진·동영상 바꾸기</span></button>`;
   const f = (k, label, cls, ph = '') => `<div class="lbl">${label}</div><input class="ed ${cls}" data-k="${k}" value="${esc(/^outro\d$/.test(k) ? plan.outro[+k.slice(5)] : plan[k])}" placeholder="${ph}">`;
   // 내레이션 칸: 켜져 있을 때만. 글자 수 예산을 넘으면 빨갛게(자동으로 빠르게 읽고, 그래도 넘치면 잘림)
-  const caps = narrSlots(L, plan.scenes.length).map(narrCap);
+  const caps = narrSlots(L, plan.scenes.length, plan.scenes.map(s => s.w)).map(narrCap);
   const nbox = (attrs, val, cap, ph) => !narrSel().on ? '' : `<div class="lbl nl">내레이션 <button class="say" type="button">듣기</button><span class="cnt mono" data-cap="${cap}"></span></div>
     <textarea class="ed s narr" rows="2" ${attrs} placeholder="${ph}">${esc(val || '')}</textarea>`;
   $('#board').innerHTML =
@@ -1052,6 +1094,7 @@ function renderPlan() {
       <div class="card-b"><div class="trow"><select class="trsel typesel" data-type="${i}" aria-label="${i + 1}번 장면 유형">${Object.entries(TYPES).map(([k, v]) =>
           `<option value="${k}" ${sType(s) === k ? 'selected' : ''}>유형: ${v}</option>`).join('')}</select>
         <button class="btn sm vbtn" data-var="${i}" title="같은 유형의 다른 배치로 바꾸기">배치 ${'AB'[sVar(s, i)]} ⇄</button></div>
+        ${lenRow(s, i)}
         ${sceneFields(s, i)}
         ${nbox(`data-s="${i}" data-f="narr"`, s.narr, caps[i + 1], '비워 두면 화면 문구를 읽어요')}</div>
       <div class="card-f"><span class="grip" data-grip="${i}" title="끌어서 순서 바꾸기">⠿ <span class="mono">${String(i + 1).padStart(2, '0')}</span></span>
@@ -1099,6 +1142,8 @@ function renderPlan() {
     ta.addEventListener('input', upd); upd();
     lbl.querySelector('.say').onclick = e => say(narrText(ta), e.currentTarget);
   });
+  $$('#board [data-wm]').forEach(b => b.onclick = () => { const [i, dl] = b.dataset.wm.split(':').map(Number); setLen(i, ends[i] - starts[i] + dl); });
+  $$('#board [data-wfit]').forEach(b => b.onclick = () => { const i = +b.dataset.wfit; setLen(i, vidDur(plan.scenes[i]), true); });
   $$('#board [data-del]').forEach(b => b.onclick = () => { plan.scenes.splice(+b.dataset.del, 1); renderPlan(); summary(); });
   $$('#board .typesel').forEach(sel => sel.onchange = () => { setType(plan.scenes[+sel.dataset.type], sel.value); renderPlan(); });
   $$('#board [data-var]').forEach(b => b.onclick = () => { const i = +b.dataset.var, sc = plan.scenes[i]; sc.v = 1 - sVar(sc, i); renderPlan(); });
@@ -1140,7 +1185,8 @@ const TR = {mix: '다양하게 섞기', panel: '컬러 패널', slide: '밀어�
 const TR_KEYS = Object.keys(TR).slice(1);
 // 오프닝·엔딩 화면 배치(composer.LAYOUTS). 자동이면 영상마다 다르게 고른다.
 const LAYS = {center: '가운데', split: '분할(사진 + 색 면)', poster: '포스터(선명한 사진)', card: '카드(흐린 사진 위 카드)',
-  polaroid: '폴라로이드(기울인 액자)', circle: '원형(둥근 사진)', band: '띠(비스듬한 색 띠)', solid: '단색(사진 없이 글자만)'};
+  polaroid: '폴라로이드(기울인 액자)', circle: '원형(둥근 사진)', band: '띠(비스듬한 색 띠)', solid: '단색(사진 없이 글자만)',
+  image: '이미지만(내 이미지 그대로 · 글자 없음)'};
 const laySel = (v, k) => `<select class="trsel laysel" data-lay="${k}" aria-label="${k === 'opening' ? '오프닝' : '엔딩'} 화면 배치" title="화면 배치">
   <option value="">배치: 자동(영상마다 다르게)</option>${Object.entries(LAYS).map(([x, n]) => `<option value="${x}" ${v === x ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
 const trSel = (v, i) => `<select class="trsel" data-tr="${i}" aria-label="전환 효과" title="이 장면이 들어올 때의 전환 효과">
@@ -1236,7 +1282,7 @@ new ResizeObserver(fitStage).observe($('#stage'));
 $('#toPreview').onclick = async () => {
   if (!planOk()) return;
   const b = $('#toPreview'), old = b.innerHTML; b.disabled = true; b.innerHTML = '<span class="spin"></span>준비 중';
-  const r = await post('/api/preview', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), view: prevView, narr: narrSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+  const r = await post('/api/preview', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), view: prevView, narr: narrSel(), bgm: bgmSel()}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
   b.disabled = false; b.innerHTML = old;
   if (r.error) { $('#e3').textContent = r.error; return; }
   $('#stageMsg').textContent = '미리보기를 준비하는 중…';
@@ -1275,7 +1321,7 @@ $('#prevRender').onclick = () => { $('#prevDlg').close(); $('#to4').click(); };
 $('#to4').onclick = async () => {
   if (!planOk()) return;
   await saveNow();
-  const r = await post('/api/render', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel(), rev}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
+  const r = await post('/api/render', {job, plan: planOut(), length: lengthSec(), audio: audioSel(), ratio: ratio(), narr: narrSel(), bgm: bgmSel(), rev}).catch(() => ({error: '서버에 연결하지 못했습니다.'}));
   if (r.conflict) showConflict(); else if (r.rev) rev = r.rev;
   if (r.error) { $('#e3').textContent = r.error; return; }
   watchRender();

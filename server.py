@@ -295,6 +295,12 @@ def normalize_scene(s, ids, pick):
         out['v'] = s['v']
     if s.get('cbar') is False:   # 사진 콜라주 하단 막대를 이 장면만 끈 경우
         out['cbar'] = False
+    try:   # 장면 길이 비중(기본 1): 전체 길이는 그대로, 다른 장면과의 비율만 바꾼다
+        w = float(s.get('w', 1))
+        if abs(w - 1) > 0.005:
+            out['w'] = round(min(20.0, max(0.5, w)), 2)
+    except (TypeError, ValueError):
+        pass
     if t == 'collage':
         ps = [x for x in dict.fromkeys(s.get('photos') or []) if x in ids][:4]
         if s.get('photo') in ids and s['photo'] not in ps:
@@ -435,9 +441,11 @@ CPS = 4.6  # 보통 속도에서 초당 글자 수(공백 제외). edge-tts 한�
 
 
 def narr_slots(starts, os_, length):
-    """말할 수 있는 구간 [(시작, 끝)]: 오프닝, 장면 1..n, 엔딩. 장면 전환 직후 0.4초 뒤 시작, 다음 장면 0.1초 전 끝."""
+    """말할 수 있는 구간 [(시작, 끝)]: 오프닝, 장면 1..n, 엔딩. 장면 전환 직후 0.4초 뒤 시작, 다음 장면 0.1초 전 끝.
+    첫 장면만은 오프닝이 완전히 끝난 뒤(오프닝은 첫 장면 시작보다 0.8초 더 길다)에 시작한다. 안 그러면 오프닝 화면 위로 첫 장면 자막이 나온다."""
     nexts = starts[1:] + [os_]
-    return ([(0.5, starts[0] - 0.1)] + [(a + 0.4, b - 0.1) for a, b in zip(starts, nexts)]
+    first = [(starts[0] + 0.9, nexts[0] - 0.1)]
+    return ([(0.5, starts[0] - 0.1)] + first + [(a + 0.4, b - 0.1) for a, b in zip(starts[1:], nexts[1:])]
             + [(os_ + 0.5, length - 0.3)])
 
 
@@ -526,24 +534,26 @@ def song_beats(job, m=None):
     return m['beats']
 
 
-def scene_timing(job, length, n, audio):
-    """장면 시작 시각과 엔딩 시작. audio.sync가 켜져 있으면 장면 전환을 음악 박자에 맞춘다."""
+def scene_timing(job, length, n, audio, ws=None):
+    """장면 시작 시각과 엔딩 시작. audio.sync가 켜져 있으면 장면 전환을 음악 박자에 맞춘다. ws=장면별 길이 비중."""
     b = song_beats(job) if audio and audio.get('sync') else None
     if not b:
-        return beats.snap_times(length, n)
-    return beats.snap_times(length, n, b['beats'], b['down'], audio['start'], audio['dur'])
+        return beats.snap_times(length, n, ws=ws)
+    return beats.snap_times(length, n, b['beats'], b['down'], audio['start'], audio['dur'], ws=ws)
 
 
-def build(job, p, length, audio, name='index.html', extra='', ratio='landscape', narr=None):
+def build(job, p, length, audio, name='index.html', extra='', ratio='landscape', narr=None, bgm=None):
     """내레이션을 만들고 composer로 HTML을 조립해 작업 폴더에 쓴다. 잘린 내레이션 구간 목록을 돌려준다.
     plan의 blur(얼굴 모자이크)·logo('corner'|'ends'|'off'), narr.sub(자막)를 반영한다."""
     m = ensure_media(job)
-    timing = scene_timing(job, length, len(p['scenes']), audio)
+    timing = scene_timing(job, length, len(p['scenes']), audio, [s.get('w') for s in p['scenes']])
     clips, cut = make_narration(job, p, length, narr, timing) if narr and narr.get('on') else ([], [])
+    # 배경음악 크기: 사용자가 고른 값(0~1)이 있으면 그것, 없으면 내레이션이 있을 때 0.12(목소리가 묻히지 않게), 없으면 0.7
+    vol = round(float(bgm), 2) if isinstance(bgm, (int, float)) and not isinstance(bgm, bool) and 0 <= bgm <= 1 else (0.12 if clips else 0.7)
     audio = (f'<audio id="bgm" src="assets/bgm.mp3" data-start="0" data-duration="{audio["dur"]}" data-media-start="{audio["start"]}" '
-             f'data-track-index="9" data-volume="{0.25 if clips else 0.7}" data-fade-in="1" data-fade-out="2"></audio>') if audio else ''
+             f'data-track-index="9" data-volume="{vol}" data-fade-in="1" data-fade-out="2"></audio>') if audio else ''
     audio += ''.join(f'\n      <audio id="nr{i}" src="assets/{f}" data-start="{s}" data-duration="{d}" data-track-index="{20 + i}" data-volume="1"></audio>'
-                     for i, (s, d, f, _) in enumerate(clips))  # 내레이션이 있으면 배경음악을 0.25로 낮춘다
+                     for i, (s, d, f, _) in enumerate(clips))  # 내레이션이 있으면 배경음악을 낮춘다(위 vol)
     logo = p.get('logo', 'corner') if m.get('logo') else None
     caps = [(s, d, t) for s, d, _, t in clips] if narr and narr.get('sub', True) else None
     page = composer.compose(jobdir(job), p, length, ratio=ratio, audio_html=audio, extra=extra, timing=timing,
@@ -711,7 +721,7 @@ def build_from_request(b, **kw):
     for k in ('intro_photo', 'outro_photo'):  # 그대로 HTML에 들어가는 값이라 실제 사진 id만 허용
         b['plan'][k] = pick(b['plan'].get(k))
     ratio = kw.pop('ratio', None) or ('portrait' if b.get('ratio') == 'portrait' else 'landscape')
-    return build(b['job'], b['plan'], length, a, ratio=ratio, narr=b.get('narr'), **kw)
+    return build(b['job'], b['plan'], length, a, ratio=ratio, narr=b.get('narr'), bgm=b.get('bgm'), **kw)
 
 
 def outputs_for(ratio):
@@ -740,7 +750,7 @@ def render():
         a = b.get('audio') if meta_of(b['job'])['audio'] else None  # build_from_request와 같은 규칙으로 맞춰야 썸네일 시각이 영상과 맞다
         if a:
             a = {'start': max(0.0, float(a['start'])), 'dur': max(1.0, min(float(a['dur']), max(15, min(600, int(b.get('length', 30)))))), 'sync': a.get('sync', True) is not False}
-        st0 = scene_timing(b['job'], max(15, min(600, int(b.get('length', 30)))), len(b['plan']['scenes']), a)[0][0]
+        st0 = scene_timing(b['job'], max(15, min(600, int(b.get('length', 30)))), len(b['plan']['scenes']), a, [s.get('w') for s in b['plan']['scenes']])[0][0]
     except (KeyError, IndexError, ValueError) as e:
         return jsonify(error='구성 정보가 올바르지 않습니다: %s' % e), 400
     except RuntimeError as e:

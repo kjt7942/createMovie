@@ -15,7 +15,7 @@ assert 'url' in pv, pv
 html = open(os.path.join(server.JOBS, job, 'preview.html'), encoding='utf-8').read()
 tags = re.findall(r'<audio id="nr\d+" src="assets/(tts_\w+\.mp3)" data-start="([\d.]+)" data-duration="([\d.]+)"', html)
 assert len(tags) == len(p['scenes']) + 2, tags
-assert 'data-volume="0.25"' in html, '내레이션이 있으면 배경음악을 낮춰야 함'
+assert 'data-volume="0.12"' in html, '내레이션이 있으면 배경음악을 낮춰야 함'
 slots = server.narr_slots(*server.beats.snap_times(30, len(p['scenes'])), 30)
 for (f, s, d), (a, b) in zip(tags, slots):
     assert abs(float(s) - round(a, 2)) < 0.01 and float(d) <= b - a + 0.01, (f, s, d, a, b)
@@ -25,7 +25,7 @@ assert c.post('/api/render', json={'job': job, 'plan': p, 'length': 30, 'narr': 
 while (s := c.get(f'/api/status/{job}').json)['state'] in ('queued', 'running', 'none'): time.sleep(2)
 assert s['state'] == 'done', s
 out = os.path.join(server.JOBS, job, 'output.mp4')
-# 1번 장면 내레이션 구간이 배경음악(0.25)만 나오는 구간보다 확실히 커야 한다
+# 1번 장면 내레이션 구간이 배경음악(0.12)만 나오는 구간보다 확실히 커야 한다
 def vol(a, d):
     e = subprocess.run(['ffmpeg', '-ss', str(a), '-t', str(d), '-i', out, '-af', 'volumedetect', '-f', 'null', '-'],
                        capture_output=True, text=True, encoding='utf-8', errors='replace').stderr

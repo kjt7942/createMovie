@@ -33,16 +33,17 @@ STYLES = {
                 'mix': ['whip', 'flash', 'diagonal', 'slide', 'wipe-up', 'split', 'blinds', 'slide-up', 'slide-down']},
 }
 # 오프닝·엔딩 배치. plan['opening'] / plan['ending']에 지정, 없으면(자동) seed로 영상마다 다르게 고른다.
-LAYOUTS = ['center', 'split', 'poster', 'card', 'polaroid', 'circle', 'band', 'solid']
+LAYOUTS = ['center', 'split', 'poster', 'card', 'polaroid', 'circle', 'band', 'solid', 'image']
+AUTO_LAYOUTS = LAYOUTS[:-1]   # 자동 배치는 글자가 있는 배치만. 'image'(내 이미지만 그대로)는 직접 고를 때만
 LAYOUT_NAMES = {'center': '가운데', 'split': '분할', 'poster': '포스터', 'card': '카드',
-                'polaroid': '폴라로이드', 'circle': '원형', 'band': '띠', 'solid': '단색'}
+                'polaroid': '폴라로이드', 'circle': '원형', 'band': '띠', 'solid': '단색', 'image': '이미지만'}
 
 
 def layout_of(p, which):
     v = p.get(which)
     if v in LAYOUTS:
         return v
-    return LAYOUTS[(int(p.get('seed') or 0) + (0 if which == 'opening' else 2)) % len(LAYOUTS)]
+    return AUTO_LAYOUTS[(int(p.get('seed') or 0) + (0 if which == 'opening' else 2)) % len(AUTO_LAYOUTS)]
 
 
 STYLE_HINT = ('classic(기본, 무난한 소개), pop(아이·가족·축제·놀이처럼 밝고 귀여운 주제), '
@@ -127,8 +128,10 @@ TIMELINE_JS = '''<script>
       F("#b3", { scale: 0 }, { scale: 1, duration: 0.8, ease: "back.out(2)" }, 0.35);
       tl.to("#b1", { x: 40, y: 30, duration: 4, ease: "sine.inOut" }, 1);
       body("#intro .ilogo", 0.1 * K); body("#yr", 0.3 * K); head("#big", 0.5 * K); body("#hanja", 1.2 * K); body("#org", 1.6 * K);
-      tl.to("#intro .photo", { scale: 1.08, duration: starts[0] + 0.8, ease: "none" }, 0);
-      F("#iacc", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 0.05);
+      if (!document.querySelector("#intro.lay-image")) {   // 이미지만 배치는 사용자의 이미지를 확대·이동 없이 그대로 보여 준다
+        tl.to("#intro .photo", { scale: 1.08, duration: starts[0] + 0.8, ease: "none" }, 0);
+        F("#iacc", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, 0.05);
+      }
 
       starts.forEach((s, i) => {
         const id = "#s" + (i + 1), T = TYPES[i], at = x => s + x * K, d = durs[i];
@@ -169,8 +172,10 @@ TIMELINE_JS = '''<script>
       F("#ob1", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.5);
       F("#ob2", { scale: 0 }, { scale: 1, duration: 0.9, ease: "back.out(1.6)" }, os + 0.6);
       head("#o1", os + 0.7 * K); head("#o2", os + 1.0 * K); body("#o3", os + 1.6 * K); body("#outro .ologo", os + 2.0 * K);
-      tl.to("#outro .photo", { scale: 1.08, duration: total - os, ease: "none" }, os);
-      F("#oacc", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, os + 0.3);
+      if (!document.querySelector("#outro.lay-image")) {
+        tl.to("#outro .photo", { scale: 1.08, duration: total - os, ease: "none" }, os);
+        F("#oacc", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.7, ease: "power3.out" }, os + 0.3);
+      }
       tl.to("#root", { opacity: 0, duration: 0.5, ease: "power1.in" }, total - 0.5);
       F("#progress", { scaleX: 0 }, { scaleX: 1, duration: total, ease: "none" }, 0);
 
@@ -428,6 +433,12 @@ LAYOUT_CSS = '''<style>
       #root .scene:not(.lay-center) .blob { display: none; }
       #root .scene:not(.lay-center) .acc { display: block; }
       #root .lay-polaroid .acc, #root .lay-circle .acc { display: none; }
+      /* 이미지만: 글자·장식 없이 사용자의 이미지 전체를 잘리지 않게(contain) 보여 주고, 남는 곳은 같은 이미지를 흐리게 채운다 */
+      #root .lay-image .yr, #root .lay-image .big, #root .lay-image .hanja, #root .lay-image .org, #root .lay-image .ilogo,
+      #root .lay-image .o1, #root .lay-image .o2, #root .lay-image .o3, #root .lay-image .ologo { display: none; }
+      #root #intro.lay-image, #root #outro.lay-image { background: #000; }
+      #root .lay-image .acc { inset: -80px; background-size: cover; background-position: center; filter: blur(40px) brightness(.5); z-index: 0; }
+      #root .lay-image .photo { inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 1; filter: none; z-index: 1; }
       /* 분할: 한쪽 색 면에 글자, 다른 쪽 선명한 사진 */
       #root #intro.lay-split, #root #outro.lay-split { background: var(--ground); }
       #root .lay-split .photo { inset: auto; top: 0; width: 54%; height: 100%; opacity: 1; filter: none; }
@@ -865,7 +876,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
         'circle': min(150, int(900 / tl_)) if portrait else min(130, int(1500 / tl_)),
         'band': min(160, int(900 / tl_)) if portrait else min(170, int(1500 / tl_)),
         'solid': min(200, int(900 / tl_)) if portrait else min(220, int(1500 / tl_)),
-    }[lay_i]
+    }.get(lay_i, 100)
     n = len(p['scenes'])
     starts, os_ = timing or beats.snap_times(length, n)
     nexts = starts[1:] + [os_]
@@ -880,6 +891,10 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
     ilogo = '<img class="ilogo" src="assets/logo.png" alt="" />' if logo else ''
     ologo = '<img class="ologo" src="assets/logo.png" alt="" />' if logo else ''
     scenes = ''.join(scene_html(i, s, tag, starts[i], durs[i], st['colors'], seed, M) for i, s in enumerate(p['scenes']))
+    bg = lambda lay, pid: f' style="background-image:url({M._img(pid)})"' if lay == 'image' else ''   # 이미지만 배치의 흐린 배경
+    bgi, bgo = bg(lay_i, p['intro_photo']), bg(lay_o, p['outro_photo'])
+    if 'image' in (lay_i, lay_o):   # 글자 없이 이미지만: 오프닝·엔딩 구간의 내레이션 자막도 숨긴다(소리는 그대로)
+        captions = [c for c in captions or [] if not ((lay_i == 'image' and c[0] < starts[0]) or (lay_o == 'image' and c[0] >= os_))]
     caps = ''.join(f'\n      <div class="cap clip" id="cap{i}" data-start="{a}" data-duration="{d}" data-track-index="{40 + i}"><span>{e(t)}</span></div>'
                    for i, (a, d, t) in enumerate(captions or []) if t.strip())
     o = p['outro']
@@ -888,7 +903,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
             f'<span>{e(disc)}</span></div>') if disc else ''
     body = f'''
       <div id="intro" class="scene clip lay-{lay_i}" data-start="0" data-duration="{round(starts[0] + 0.8, 2)}" data-track-index="0">
-        {M.tag(p['intro_photo'], 'photo', 0, round(starts[0] + 0.8, 2), full)}<div class="acc" id="iacc"></div>{ilogo}
+        {M.tag(p['intro_photo'], 'photo', 0, round(starts[0] + 0.8, 2), full)}<div class="acc" id="iacc"{bgi}></div>{ilogo}
         <div class="blob" id="b1" style="width:620px;height:620px;left:-160px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="b2" style="width:380px;height:380px;right:-90px;bottom:-110px;background:var(--sun);opacity:.95"></div>
         <div class="blob" id="b3" style="width:160px;height:160px;right:300px;top:90px;background:var(--mint);opacity:.9"></div>
@@ -898,7 +913,7 @@ def compose(job_dir, p, length, ratio='landscape', audio_html='', extra='', timi
         <div class="org" id="org"><b>{org}</b></div>
       </div>{scenes}
       <div id="outro" class="scene clip lay-{lay_o}" data-start="{os_}" data-duration="{round(total - os_, 2)}" data-track-index="2">
-        {M.tag(p['outro_photo'], 'photo', os_, round(total - os_, 2), full)}<div class="acc" id="oacc"></div>{ologo}
+        {M.tag(p['outro_photo'], 'photo', os_, round(total - os_, 2), full)}<div class="acc" id="oacc"{bgo}></div>{ologo}
         <div class="blob" id="ob1" style="width:520px;height:520px;right:-120px;top:-140px;background:var(--coral);opacity:.9"></div>
         <div class="blob" id="ob2" style="width:300px;height:300px;left:-80px;bottom:-90px;background:var(--mint);opacity:.9"></div>
         <div class="o1" id="o1">{split_text(o[0])}</div><div class="o2" id="o2">{split_text(o[1])}</div><div class="o3" id="o3">{e(o[2])}</div>
