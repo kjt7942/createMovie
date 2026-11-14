@@ -97,12 +97,33 @@ def analyze(path):
 
 
 # ---------------------------------------------------------------- 장면 시점 맞추기
-def snap_times(length, n, beats=None, down=0, audio_start=0.0, audio_dur=None):
+def scene_steps(length, ws, lo=2.4):
+    """장면별 길이 [초]: 오프닝·엔딩을 뺀 (length-8)초를 장면 비중 ws(0.5~20, 기본 1)대로 나누되 장면당 최소 lo초.
+    모두 같은 비중이면 균등 배분. 화면(index.html sceneSteps())도 같은 계산을 쓴다."""
+    n, tot = len(ws), length - 8
+    if not n:
+        return []
+    w = [min(20.0, max(0.5, float(x or 1))) for x in ws]
+    fixed = set()
+    while tot >= lo * n:
+        free = [i for i in range(n) if i not in fixed]
+        rem, sw = tot - lo * len(fixed), sum(w[i] for i in free)
+        bad = [i for i in free if rem * w[i] / sw < lo - 1e-9]
+        if not bad:
+            break
+        fixed.update(bad)
+    free = [i for i in range(n) if i not in fixed]
+    rem, sw = tot - lo * len(fixed), sum(w[i] for i in free)
+    return [lo if i in fixed else rem * w[i] / sw for i in range(n)]
+
+
+def snap_times(length, n, beats=None, down=0, audio_start=0.0, audio_dur=None, ws=None):
     """장면 시작 시각 [s1..sn]과 엔딩 시작 os를 돌려준다.
     기본은 균등 배분(오프닝 3.6초, 엔딩 4.4초). beats가 있으면 각 경계를 가장 가까운 비트로 옮기되,
-    한 박 안쪽에 마디 첫 박이 있으면 그쪽을 우선한다. 화면(index.html timing())도 같은 규칙을 쓴다."""
-    step = (length - 8) / n
-    base = [3.6 + step * i for i in range(n)] + [3.6 + step * n]
+    한 박 안쪽에 마디 첫 박이 있으면 그쪽을 우선한다. 화면(index.html timing())도 같은 규칙을 쓴다.
+    ws(장면별 길이 비중)가 있으면 장면 길이를 그 비율로 나눈다(scene_steps)."""
+    steps = scene_steps(length, list(ws) if ws else [1] * n)
+    base = [3.6 + sum(steps[:i]) for i in range(n + 1)]
     if not beats or n < 1:
         return [round(v, 2) for v in base[:-1]], round(base[-1], 2)
     end = length if audio_dur is None else min(length, audio_dur)
@@ -112,6 +133,7 @@ def snap_times(length, n, beats=None, down=0, audio_start=0.0, audio_dur=None):
     ib = sorted(b2 - b1 for (b1, _), (b2, _) in zip(bt, bt[1:]))[len(bt) // 2]   # 비트 간격(중앙값)
     out, last = [], 0.0
     for k, want in enumerate(base):
+        step = steps[min(k, n - 1)]                           # 이 경계에서 허용하는 이동 폭의 기준(그 장면의 길이)
         lo = last + (2.4 if k else 2.6)                       # 장면은 최소 2.4초(오프닝은 2.6초) 보장
         hi = (length - 3.4) if k == n else want + min(step * 0.45, 2 * ib)
         if k == n:

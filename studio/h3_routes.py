@@ -13,12 +13,29 @@ runner = engine.Runner()
 PUBLIC = {"h3.index", "h3.availability"}
 
 
+def lan_ip():
+    """이 PC의 LAN IP(예: 192.168.0.133). 실제 전송 없이 라우팅 표만 보고 알아낸다."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("192.0.2.1", 9))
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+LAN_IP = lan_ip()
+
+
 def is_local():
     # The host and origin checks block DNS rebinding and other sites' pages from starting renders through the browser.
     origin = request.headers.get("Origin")
     if any(request.headers.get(h) for h in ("X-Forwarded-For", "Forwarded", "X-Real-IP")):
         return False  # A proxy on this PC connects from 127.0.0.1, so its visitors would otherwise look local.
-    return (request.remote_addr in ("127.0.0.1", "::1") and request.host.rsplit(":", 1)[0] in ("127.0.0.1", "localhost")
+    # 이 PC가 자기 LAN IP로 접속한 경우(접속자 주소 == 서버 주소)도 로컬이다. 다른 기기는 주소가 달라 막힌다.
+    return (request.remote_addr in ("127.0.0.1", "::1", LAN_IP) and request.host.rsplit(":", 1)[0] in ("127.0.0.1", "localhost", LAN_IP)
             and (not origin or origin.split("//")[-1] == request.host))
 
 

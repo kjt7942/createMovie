@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "studio"))
 import engine
 
-STATUS_URL = f"http://127.0.0.1:{os.environ.get('PORT', '5000')}/h3/api/status"
+STATUS_URL = f"http://127.0.0.1:{os.environ.get('PORT', '5100')}/h3/api/status"
 
 
 def export():

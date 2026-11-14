@@ -80,6 +80,38 @@ def object_pos(fx, fy, img_aspect, box_aspect):
 
 
 # ---------------------------------------------------------------- 동영상
+def photo_taken(im):
+    """사진 EXIF의 촬영 일시 -> 'YYYY-MM-DDTHH:MM:SS'(카메라 시계 기준, 현지 시각) 또는 None.
+    촬영 시각(DateTimeOriginal)이 없으면 디지털화 시각, 그다음 파일 기록 시각(DateTime)을 쓴다."""
+    try:
+        ex = im.getexif()
+        sub = ex.get_ifd(0x8769)
+        v = sub.get(36867) or sub.get(36868) or ex.get(306)
+        d, t = str(v).strip().replace('\x00', '').split(' ')[:2]
+        y, mo, da = d.split(':'); h, mi, se = t.split(':')[:3]
+        if int(y) < 1990:   # 시계가 설정되지 않은 카메라(0000:00:00, 1970년 등)
+            return None
+        return f'{int(y):04d}-{int(mo):02d}-{int(da):02d}T{int(h):02d}:{int(mi):02d}:{int(float(se)):02d}'
+    except Exception:
+        return None
+
+
+def video_taken(path):
+    """동영상 메타데이터의 촬영 시각(creation_time, 보통 UTC) -> 이 PC 현지 시각 'YYYY-MM-DDTHH:MM:SS' 또는 None."""
+    from datetime import datetime
+    try:
+        r = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format_tags=creation_time,com.apple.quicktime.creationdate',
+                            '-of', 'json', path], capture_output=True, text=True, timeout=60)
+        tags = json.loads(r.stdout).get('format', {}).get('tags', {})
+        v = tags.get('com.apple.quicktime.creationdate') or tags.get('creation_time')   # 아이폰 값은 현지 시간대가 붙어 있다
+        t = datetime.fromisoformat(v)   # 'Z', 소수 초, '+0900' 모두 처리(Python 3.11+)
+        if t.tzinfo:
+            t = t.astimezone().replace(tzinfo=None)
+        return t.strftime('%Y-%m-%dT%H:%M:%S') if t.year >= 1990 else None
+    except Exception:
+        return None
+
+
 def probe(path):
     """(길이초, 가로, 세로, 회전 반영) 또는 None."""
     try:

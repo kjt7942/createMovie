@@ -37,21 +37,21 @@ Wan2GP 안의 대체 모델: Wan 2.2 I2V·Wan 2.1 FLF2V·VACE, Qwen-Image-Edit 2
 ## 실행
 **자동 설치(Windows 10/11)**: `setup.bat`을 더블클릭합니다. Python 3.11+, Node.js 22+, FFmpeg, Git이 없으면 winget으로 설치하고, 패키지·글꼴·렌더링 엔진을 받고, Gemini API 키를 물은 뒤 바탕화면 바로가기를 만듭니다. 이미 있는 것은 건너뛰므로 여러 번 실행해도 됩니다. NVIDIA GPU가 있으면 AI 영상 생성 도구(약 80GB)도 설치할지 묻습니다(`setup.bat -H3`는 묻지 않고 설치).
 
-실행은 바탕화면 **createMovie** 또는 `start.bat`입니다. `http://localhost:5000`이 열립니다. 상단 메뉴의 **설치·점검**에서 도구별 상태와 설치 안내를 볼 수 있습니다.
+실행은 바탕화면 **createMovie** 또는 `start.bat`입니다. `http://localhost:5100`이 열립니다. 상단 메뉴의 **설치·점검**에서 도구별 상태와 설치 안내를 볼 수 있습니다.
 
 **직접 설치**
 ```
 pip install -r requirements.txt
 python tools/get_fonts.py   # 영상용 한글 글꼴·얼굴 인식 모델(처음 한 번)
 echo GEMINI_API_KEY=발급받은키 > .env
-python server.py   # http://localhost:5000
+python server.py   # http://localhost:5100
 python tools/setup_h3.py   # AI 영상 생성까지 쓸 때(NVIDIA GPU 8GB 이상, 약 80GB)
 ```
 
 **서비스 구성**: 사진 홍보 영상(`/`)과 AI 영상 생성(`/h3`)이 한 서버에서 돕니다.
 - **대기열 하나**: 이 PC에서 하는 작업은 종류와 상관없이 넣은 순서대로 하나씩 처리해 서로 겹치지 않습니다. 상단 대기열에서 보고, 빼고, 멈추고, 재개합니다. 재시작해도 남습니다. 워커 모드의 홍보 영상 렌더는 다른 PC에서 돌기 때문에 이 대기열에 서지 않습니다.
 - **GPU가 없을 때**: AI 영상 생성 화면에 쓸 수 없는 이유를 안내하고 생성을 막습니다. 홍보 영상은 그대로 쓸 수 있고, 완성된 AI 영상은 볼 수 있습니다.
-- **접속 범위**: `HOST=0.0.0.0`이어도 AI 영상 생성과 대기열 조작은 서버가 실행 중인 PC에서만 됩니다.
+- **접속 범위**: 기본은 `0.0.0.0`이라 같은 네트워크의 다른 PC도 `http://서버PC IP:5100`으로 접속합니다(이 PC에서만 열려면 `.env`에 `HOST=127.0.0.1`). 어느 쪽이든 AI 영상 생성과 대기열 조작, 저장 폴더 복사는 서버가 실행 중인 PC에서만 됩니다.
 - **AI 영상을 홍보 영상에**: AI 영상 프로젝트의 **홍보 영상에 넣기**를 누르면 그 영상을 클립으로 넣은 새 홍보 영상 프로젝트가 만들어집니다.
 
 ## NAS + PC 렌더 워커 구성 (권장)
@@ -73,7 +73,7 @@ PC가 NAS에 일감을 물어보는 방식이라 공유기 포트를 열 필요�
 - 이후 윈도우를 켜면 워커가 최소화 상태로 자동 실행됩니다(바탕화면 바로가기로도 실행 가능)
 - macOS/Linux: Node.js 22+·FFmpeg 설치 후 `node worker.mjs --setup`, `node worker.mjs`
 
-`WORKER_TOKEN`을 비워 두면 예전처럼 서버가 직접 렌더링합니다(PC 한 대로 쓸 때). 다른 기기에서 접속하려면 `.env`에 `HOST=0.0.0.0`.
+`WORKER_TOKEN`을 비워 두면 예전처럼 서버가 직접 렌더링합니다(PC 한 대로 쓸 때). 기본 포트는 5100이고 `.env`의 `PORT`로 바꿉니다.
 
 ---
 

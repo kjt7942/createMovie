@@ -1,9 +1,4 @@
 @echo off
-title createMovie
 cd /d "%~dp0"
-python server.py
-if errorlevel 1 (
-  echo.
-  echo createMovie failed to start. If tools are missing, run setup.bat. If it is already running, open http://127.0.0.1:5000
-  pause
-)
+rem Runs hidden in background. Logs: server.log. Stop: end the python process on port 5100.
+powershell -NoProfile -Command "Start-Process python -ArgumentList server.py -WorkingDirectory (Get-Location) -WindowStyle Hidden -RedirectStandardOutput server.log -RedirectStandardError server.err.log"
