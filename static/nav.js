@@ -3,11 +3,25 @@
   const path = location.pathname, on = p => (p === '/' ? path === '/' : path.startsWith(p)) ? 'on' : '';
   const bar = document.createElement('nav');
   bar.id = 'gnav'; bar.setAttribute('aria-label', '서비스');
-  bar.innerHTML = `<a class="logo" href="/" aria-label="createMovie"><i></i><span class="w" aria-hidden="true">c<span class="a">rea<b class="p k"><u>♪</u>크</b></span>te<span class="a">Mov<b class="p m">무<u>♫</u></b></span>ie</span></a><a class="${on('/')}" href="/">홍보 영상(HyperFrames)</a><a class="${on('/h3')}" href="/h3/">AI 영상 생성(Wan2GP)</a><a class="${on('/characters')}" href="/characters">캐릭터 생성</a><a class="${on('/batch')}" href="/batch">콘텐츠 생성</a><a class="${on('/setup')}" href="/setup">설치·점검</a><a class="${on('/guide')}" href="/guide">사용법</a>
+  bar.innerHTML = `<a class="logo" href="/" aria-label="createMovie"><i></i><span class="w" aria-hidden="true">c<span class="a">rea<b class="p k"><u>♪</u>크</b></span>te<span class="a">Mov<b class="p m">무<u>♫</u></b></span>ie</span></a><a class="${on('/')}" href="/">홍보 영상(HyperFrames)</a><a class="${on('/h3')}" href="/h3/" data-gpu>AI 영상 생성(Wan2GP)</a><a class="${on('/characters')}" href="/characters" data-gpu>캐릭터 생성</a><a class="${on('/batch')}" href="/batch" data-gpu>콘텐츠 생성</a><a class="${on('/setup')}" href="/setup">설치·점검</a><a class="${on('/guide')}" href="/guide">사용법</a>
     <span id="gg" title="그래픽카드 온도, 전력, 메모리, 팬"></span><button id="gq" aria-expanded="false" aria-controls="gp">대기열 확인 중</button><div id="gp" hidden></div>`;
   document.body.prepend(bar);
   const setHeight = () => document.documentElement.style.setProperty('--nav-h', window.innerWidth <= 720 ? '0px' : `${bar.offsetHeight}px`);  // 화면별 고정 머리글이 이 막대 아래에 붙게
   setHeight(); addEventListener('resize', setHeight);
+  // GPU가 필요한 메뉴(data-gpu): 이 PC에 쓸 수 있는 GPU가 없거나 다른 PC에서 접속했으면 취소선으로 막고, 눌러도 이동하지 않는다. 이유는 마우스를 올리면 보인다.
+  const gpuLinks = [...bar.querySelectorAll('a[data-gpu]')];
+  gpuLinks.forEach(a => { a.dataset.name = a.textContent; a.addEventListener('click', e => { if (a.classList.contains('off')) e.preventDefault(); }); });
+  async function gateMenus() {
+    const st = await fetch('/h3/api/availability').then(r => r.json()).catch(() => null);
+    if (!st) return;   // 확인하지 못하면 막지 않는다(서버가 잠깐 끊겼을 수 있다)
+    const off = !st.ok || !st.local, why = !st.local ? '서버가 실행 중인 PC에서만 쓸 수 있습니다' : ((st.reasons || [])[0] || 'NVIDIA GPU가 필요합니다');
+    gpuLinks.forEach(a => {
+      a.classList.toggle('off', off);
+      if (off) { a.setAttribute('aria-disabled', 'true'); a.tabIndex = -1; a.title = `${a.dataset.name} — ${why}`; }
+      else { a.removeAttribute('aria-disabled'); a.removeAttribute('tabindex'); a.removeAttribute('title'); }
+    });
+  }
+  gateMenus(); document.addEventListener('visibilitychange', () => { if (!document.hidden) gateMenus(); });
   const btn = bar.querySelector('#gq'), panel = bar.querySelector('#gp'), gpu = bar.querySelector('#gg');
   const val = (v, f) => (v == null ? '-' : f(v));
   function drawGpu(g, age) {  // 샘플이 오래됐으면 마지막 값을 믿지 않는다. 기록이 아예 없으면 GPU가 없는 환경이라 비운다.

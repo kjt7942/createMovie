@@ -905,17 +905,22 @@ def wgp_processes():
 
 
 _availability = (0.0, None)
+_availability_lock = threading.Lock()
 
 
 def availability():
     """Whether H3 can run on this machine, with reasons in the user's words. nvidia-smi present but silent is a crash, not a missing GPU.
-    Cached for 5s because any visitor can ask, and each check starts a process."""
+    Cached for 5s because any visitor can ask, and each check starts a process. Only one check runs at a time: visitors who arrive
+    meanwhile wait for it and share its result (a hung driver would otherwise start one nvidia-smi per visitor)."""
     global _availability
     if time.time() - _availability[0] < 5 and _availability[1]:
         return dict(_availability[1])
-    state = _check_availability()
-    _availability = (time.time(), state)
-    return dict(state)
+    with _availability_lock:
+        if time.time() - _availability[0] < 5 and _availability[1]:  # the check that held the lock has just filled the cache
+            return dict(_availability[1])
+        state = _check_availability()
+        _availability = (time.time(), state)
+        return dict(state)
 
 
 def _check_availability():

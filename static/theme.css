@@ -93,6 +93,7 @@ textarea.input, .ui textarea { height:auto; min-height:128px; padding:11px 12px;
 #gnav a { color:var(--nav-ink); text-decoration:none; padding:5px 10px; border-radius:8px; }
 #gnav a:hover { background:var(--nav-on); }
 #gnav a.on { color:#fff; background:var(--nav-on); font-weight:600; }
+#gnav a.off, #gnav a.off:hover, #gnav a.on.off { color:var(--nav-ink); background:none; font-weight:400; opacity:.45; text-decoration:line-through; cursor:not-allowed; }   /* GPU가 없어 쓸 수 없는 메뉴 */
 #gg { position:absolute; top:8px; right:max(24px, calc((100% - 1192px) / 2)); font:13px var(--mono); letter-spacing:0; white-space:nowrap; }  /* 위쪽 빈 줄 오른쪽. 진행 표시는 그 아래 메뉴 줄 끝 */
 #gg.hot { color:#FFC56B; font-weight:600; }
 #gq { display:block; margin-left:auto; height:32px; color:#fff; background:var(--nav-on); border:1px solid var(--nav-line); border-radius:8px; padding:0 12px; font-size:13px; font-weight:600; cursor:pointer; max-width:min(100%, 260px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

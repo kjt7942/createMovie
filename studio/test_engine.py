@@ -770,6 +770,28 @@ def check_llm_prompt():
     assert "fixed by reference images" not in text
 
 
+def check_availability_single_flight():
+    """Many visitors at once: one GPU check runs, the rest wait and share its result; later within 5 s nothing runs."""
+    calls, saved = [], (engine._check_availability, engine._availability)
+
+    def slow():
+        calls.append(1)
+        time.sleep(0.3)
+        return {"ok": False, "gpu_ok": False, "installed": False, "reasons": ["x"], "license_notice": "", "ref_installed": False}
+    engine._check_availability, engine._availability = slow, (0.0, None)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(engine.availability())) for _ in range(20)]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert len(calls) == 1 and len(results) == 20 and all(r["reasons"] == ["x"] for r in results), calls
+    engine.availability()
+    assert len(calls) == 1, "within 5 s the cached result is used"
+    engine._availability = (time.time() - 6, engine._availability[1])
+    engine.availability()
+    assert len(calls) == 2, "after 5 s it checks again"
+    engine._check_availability, engine._availability = saved
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("check_"):
