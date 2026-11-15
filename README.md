@@ -35,11 +35,11 @@
 
 Wan2GP 안의 대체 모델: Wan 2.2 I2V·Wan 2.1 FLF2V·VACE, Qwen-Image-Edit 2511은 Apache 2.0, ACE-Step 1.5는 MIT. Hunyuan 계열은 대한민국이 제외 지역이라 쓰지 않습니다.
 
-## 스모 (script-to-motion 스킬) — AI 에이전트 전용
+## 스모 ([script-to-motion](https://github.com/kstost/script-to-motion) 스킬) — AI 에이전트 전용
 
 대본이나 주제로 **내레이션이 있는 모션그래픽 영상**을 만드는 Claude Code용 스킬입니다. 웹서비스(5100)에는 표시하지 않고,
 이 저장소 폴더에서 Claude Code(AI 에이전트)를 실행했을 때만 쓰입니다. 스킬은 `.claude/skills/script-to-motion/`에 있고
-(원본 `kstost/script-to-motion`, MIT), Windows·마우스오버 진행바/단축키 도움말/클릭 재생 정지 수정이 들어 있습니다.
+(원본 저장소 [kstost/script-to-motion](https://github.com/kstost/script-to-motion), MIT 라이선스), Windows·마우스오버 진행바/단축키 도움말/클릭 재생 정지 수정이 들어 있습니다.
 
 다른 PC(집 등)에서 처음 쓸 때:
 1. 필요한 도구: Node.js 22 이상, Python 3, FFmpeg. 저장소를 받은 뒤 `cd .claude/skills/script-to-motion/scripts && npm install`
