@@ -1,0 +1,40 @@
+/* fxkit.css — styles for js/fxkit.js (link after player.css). Layers are created by FXKit.install(). */
+
+.fxkit-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.fxkit-canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+.fxkit-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+
+/* rings / pings: a 200px circle scaled by GSAP (size 1 = 200px diameter) */
+.fxkit-ring { position: absolute; left: 0; top: 0; width: 200px; height: 200px; margin: -100px 0 0 -100px;
+              border-radius: 50%; border: 3px solid var(--fxkit-ring, rgb(var(--fxkit-accent-rgb, 89, 243, 224))); box-sizing: border-box; opacity: 0; }
+
+/* comic SFX word: display font (falls back to the stage font if --display is not installed) with a white outline */
+.fxkit-sfx { position: absolute; left: 0; top: 0; font-family: var(--display); font-weight: 900; font-size: 130px; line-height: 1;
+             white-space: nowrap; color: var(--fxkit-sfx, var(--accent-2, #ff7a45));
+             text-shadow: 5px 0 0 #fff, -5px 0 0 #fff, 0 5px 0 #fff, 0 -5px 0 #fff, 4px 4px 0 #fff, -4px 4px 0 #fff, 4px -4px 0 #fff,
+                          -4px -4px 0 #fff, 0 12px 0 rgba(0, 0, 0, .35); }
+
+/* light leak: a huge soft blob swept across the frame */
+.fxkit-leak { position: absolute; left: -20%; top: -20%; width: 140%; height: 140%; mix-blend-mode: screen; pointer-events: none; opacity: 0;
+              background: radial-gradient(closest-side at 50% 50%, rgba(190, 255, 248, .6), rgba(89, 243, 224, .18) 45%, rgba(0, 0, 0, 0) 100%); }
+.fxkit-leak.warm { background: radial-gradient(closest-side at 50% 50%, rgba(255, 226, 170, .6), rgba(255, 140, 90, .18) 45%, rgba(0, 0, 0, 0) 100%); }
+
+/* odometer: each digit is a column clipped to 1em. A text-shadow inherited by the digits would be cut at each
+   box and show as faint rectangles — so the digits carry NO text-shadow and the glow is a filter on the wrapper.
+   Override the glow per number with --fxkit-odo-glow, e.g. drop-shadow(0 0 22px rgba(89,243,224,.5)). */
+.fxkit-odo { display: inline-block; white-space: nowrap; text-shadow: none;
+             filter: var(--fxkit-odo-glow, drop-shadow(0 8px 18px rgba(0, 6, 18, .5))); }
+.fxkit-od { display: inline-block; height: 1em; overflow: hidden; vertical-align: -0.145em; line-height: 1;
+            -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 7%, #000 93%, transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0%, #000 7%, #000 93%, transparent 100%); }
+.fxkit-odo-mono .fxkit-od { vertical-align: -0.2em; }
+.fxkit-odsep { display: inline-block; overflow: hidden; vertical-align: top; }
+.fxkit-ods { display: block; }
+.fxkit-ods i { display: block; height: 1em; line-height: 1; font-style: normal; }
+
+/* glint: an overlay copy of the text, painted only inside a moving light band (tween --gx) */
+.fxkit-glo { position: absolute; left: 0; right: 0; top: 0; white-space: nowrap; pointer-events: none; text-shadow: none; text-align: inherit;
+             color: transparent; -webkit-text-fill-color: transparent;
+             background-image: linear-gradient(105deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 42%, rgba(255,255,255,.95) 48%,
+                               rgba(220,255,250,.9) 51%, rgba(255,255,255,0) 57%, rgba(255,255,255,0) 100%);
+             background-size: 300% 100%; background-position: var(--gx, 100%) 0; -webkit-background-clip: text; background-clip: text; }

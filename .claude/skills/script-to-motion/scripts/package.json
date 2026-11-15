@@ -1,0 +1,14 @@
+{
+  "name": "script-to-motion-scripts",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Helper scripts for the script-to-motion skill. jsdom: smoke.mjs; playwright-core (headless Chromium): snapshot.mjs, check_fonts.mjs, preview_art.mjs, setup_browser.mjs; fontkit + wawoff2 + polygon-clipping: text_to_paths.mjs (glyph outlines) and check_fonts.mjs (canvas text coverage).",
+  "dependencies": {
+    "fontkit": "^2.0.4",
+    "jsdom": "^27.0.0",
+    "playwright-core": "1.63.0",
+    "polygon-clipping": "^0.15.7",
+    "wawoff2": "^2.0.1"
+  }
+}

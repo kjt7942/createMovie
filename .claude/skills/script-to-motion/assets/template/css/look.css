@@ -1,0 +1,49 @@
+/* look.css — a studio finish for dark motion videos (references/craft-notes.md §Look). Opt-in by markup:
+     a backdrop   <div class="studio [warm|cool]"><i class="st-key"></i><i class="st-floor"></i></div>  as a scene's first child
+     the finish   <div class="grade"></div><div class="vignette"></div>  as the last children of #stage (above every scene)
+     a monitor    .mon > .screen   a 9:16 / 16:9 viewer with a glass reflection and a lit rim (--rim 0..1)
+   Tokens: --warm-rgb / --cool-rgb tint the warm and cool sets and the monitor rim. One wandering light per backdrop reads
+   --bx / --by from #stage — write them every frame from t in onFrame (closed form), e.g.
+     onFrame((t) => { stage.style.setProperty('--bx', 160 * Math.sin(t * 0.055) + 'px'); stage.style.setProperty('--by', 70 * Math.cos(t * 0.041) + 'px'); });
+   No grain and no horizon line: the user removed both (a line across the frame "meant nothing"; per-frame noise ruins
+   the encode). Keep footage (recordings, clips) clean: none of this goes on top of a recording. */
+:root { --warm-rgb: 255, 181, 71; --cool-rgb: 91, 224, 240; }
+
+.studio { position: absolute; inset: 0; overflow: hidden; --blob: 242, 238, 231; --blob-a: 0.045; background:
+  radial-gradient(ellipse 70% 60% at var(--kx, 50%) var(--ky, 42%), rgba(255, 255, 255, 0.055), transparent 70%),
+  radial-gradient(ellipse 120% 90% at 50% 120%, rgba(0, 0, 0, 0.6), transparent 60%),
+  linear-gradient(180deg, #10131a 0%, #0b0d12 100%); }
+.studio.warm { --blob: var(--warm-rgb); --blob-a: 0.10; background:
+  radial-gradient(ellipse 60% 55% at var(--kx, 50%) var(--ky, 45%), rgba(var(--warm-rgb), 0.10), transparent 70%),
+  linear-gradient(180deg, #14110d 0%, #0c0b09 100%); }
+.studio.cool { --blob: var(--cool-rgb); --blob-a: 0.09; background:
+  radial-gradient(ellipse 60% 55% at var(--kx, 50%) var(--ky, 45%), rgba(var(--cool-rgb), 0.09), transparent 70%),
+  linear-gradient(180deg, #0c1217 0%, #090c10 100%); }
+/* one soft light that wanders (--bx/--by from #stage) */
+.studio::after { content: ''; position: absolute; left: calc(50% - 650px); top: calc(42% - 650px); width: 1300px; height: 1300px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--blob), var(--blob-a)) 0%, transparent 62%); transform: translate(var(--bx, 0px), var(--by, 0px)); }
+/* the set: a soft key light from above and a floor that catches it — the floor fades in from nothing at its top, so no edge
+   or horizon line ever crosses the frame */
+.studio .st-key { position: absolute; left: 50%; top: -34%; width: 1600px; height: 1150px; margin-left: -800px; pointer-events: none;
+  background: radial-gradient(ellipse 48% 62% at 50% 0%, rgba(255, 248, 236, 0.075), rgba(var(--blob), 0.03) 45%, transparent 72%); }
+.studio .st-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 48%; pointer-events: none;
+  background: radial-gradient(ellipse 52% 40% at 50% 46%, rgba(255, 248, 236, 0.045), rgba(var(--blob), 0.018) 50%, transparent 75%),
+    linear-gradient(180deg, transparent 0%, transparent 40%, rgba(0, 0, 0, 0.3) 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 45%); mask-image: linear-gradient(180deg, transparent 0%, #000 45%); }
+
+/* the film finish: a very light grade (warm light, cool shadows) and a vignette */
+.grade { position: absolute; inset: 0; pointer-events: none; z-index: 39; mix-blend-mode: soft-light;
+  background: linear-gradient(170deg, rgba(255, 196, 140, 0.16) 0%, rgba(255, 196, 140, 0) 42%, rgba(60, 110, 160, 0) 60%, rgba(60, 110, 160, 0.2) 100%); }
+.vignette { position: absolute; inset: 0; pointer-events: none; z-index: 40;
+  background: radial-gradient(ellipse 88% 84% at 50% 47%, transparent 56%, rgba(0, 0, 0, 0.22) 78%, rgba(0, 0, 0, 0.5) 100%); }
+
+/* a monitor for clips: a lit rim, light spilling below it, glass over the screen (a bright reflection across the top corner,
+   a faint second band lower down, a thin dark bezel with a lit top edge) */
+.mon { position: absolute; border-radius: 26px; background: #000; overflow: hidden;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.65), 0 0 0 2px rgba(var(--cool-rgb), var(--rim, 0.55)), 0 0 70px rgba(var(--cool-rgb), calc(var(--rim, 0.55) * 0.28)),
+    0 110px 150px -60px rgba(var(--cool-rgb), calc(var(--rim, 0.55) * 0.3)), 0 0 160px rgba(255, 244, 226, 0.035); }
+.mon .screen { position: absolute; inset: 0; }
+.mon .screen::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; border-radius: inherit;
+  background: linear-gradient(152deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.025) 24%, transparent 24.5%),
+    linear-gradient(152deg, transparent 63%, rgba(255, 255, 255, 0.03) 63.5%, rgba(255, 255, 255, 0.012) 76%, transparent 76.5%);
+  box-shadow: inset 0 0 0 5px rgba(0, 0, 0, 0.6), inset 0 2px 0 5px rgba(255, 255, 255, 0.07); }

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}}</title>
+  <link rel="stylesheet" href="fonts/noto-sans-kr/noto-sans-kr-700.css">
+  <link rel="stylesheet" href="css/player.css">
+  <link rel="stylesheet" href="css/fxkit.css">
+  <link rel="stylesheet" href="css/typefx.css">
+  <link rel="stylesheet" href="css/reckit.css">
+  <link rel="stylesheet" href="css/look.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="stage" data-width="{{W}}" data-height="{{H}}">
+    <!--
+      Persistent layers (background, grain, frame) go directly in #stage.
+      Each storyboard scene is a <section class="scene" id="sNN"> — full-stage, absolutely positioned,
+      shown/hidden by scene() in js/scenes.js.
+    -->
+  </div>
+
+  <script src="vendor/gsap/gsap.min.js"></script>
+  <script src="vendor/gsap/SplitText.min.js"></script>
+  <script src="vendor/gsap/CustomEase.min.js"></script>
+  <script src="vendor/gsap/CustomBounce.min.js"></script>
+  <script src="vendor/gsap/CustomWiggle.min.js"></script>
+  <script src="vendor/gsap/DrawSVGPlugin.min.js"></script>
+  <script src="vendor/gsap/MorphSVGPlugin.min.js"></script>
+  <script src="vendor/gsap/MotionPathPlugin.min.js"></script>
+  <script src="vendor/gsap/TextPlugin.min.js"></script>
+  <script src="vendor/gsap/ScrambleTextPlugin.min.js"></script>
+  <script src="js/cues.js"></script>
+  <script src="js/sync.js"></script>          <!-- measured phrase times (scripts/sync.mjs): cue(id).when() uses them -->
+  <script src="js/player.js"></script>
+  <script src="js/fxkit.js"></script>          <!-- optional effects kit: FXKit.install(ctx) — references/fx-kit.md -->
+  <script src="js/typefx.js"></script>         <!-- expressive typography: TypeFX.install(ctx) — references/type-fx.md -->
+  <script src="js/art/core.js"></script>       <!-- illustration modules: add js/art/<group>.js below — references/art-library.md -->
+  <script src="js/media-src.js"></script>      <!-- footage: the clips this video shows (empty when none) — references/footage.md -->
+  <script src="js/media.js"></script>          <!-- footage on the master clock: MEDIA.install(ctx) -->
+  <script src="js/reckit.js"></script>         <!-- screen recordings without zooming: RecKit.install(ctx) -->
+  <script src="js/scenes.js"></script>
+</body>
+</html>

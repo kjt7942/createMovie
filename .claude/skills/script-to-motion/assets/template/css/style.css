@@ -1,0 +1,24 @@
+/* style.css — art direction for this video. Replace the tokens with the palette and type scale
+   chosen in storyboard.md. Sizes are in stage pixels (the stage is scaled as a whole). */
+
+:root {
+  --bg: #0e0f13;
+  --fg: #f4f2ee;
+  --muted: #8a8d96;
+  --accent: #ff5a36;
+  --accent-2: #3a7bff;
+
+  /* SIL OFL 1.1 catalogue fonts only (installed in fonts/, see player.css) — never add a system font to these stacks */
+  --font: 'Pretendard', sans-serif;
+  --mono: 'D2Coding', 'Pretendard', monospace;   /* code, ids, numbers in a terminal look; has Hangul */
+  --safe: 96px;            /* keep text inside this margin */
+}
+
+#stage {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+}
+/* browsers don't let form controls inherit the page font: a <button>/<input>/<select>/<textarea> in a scene would show a
+   system font — they take the scene's font like everything else */
+#stage button, #stage input, #stage select, #stage textarea { font: inherit; letter-spacing: inherit; }

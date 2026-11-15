@@ -1,0 +1,25 @@
+/* typefx.css — styles for js/typefx.js (link after player.css). Elements are created by TypeFX; see references/type-fx.md. */
+
+/* split units: the outer element belongs to the timeline (tl tweens), the inner .tx-i to TypeFX channels */
+.tx-i { display: inline-block; }
+
+/* the original content of a copied element: no box of its own, so wrapping never changes the layout;
+   hidden with visibility (inherited) while copies stand in for it */
+.tx-o { display: contents; }
+
+/* copies (shards, glitch bands, extrusion layers, smear ghosts): exact overlays of the original box.
+   aria-hidden + data-fx-copy: snapshot.mjs does not count them as overlapping text; check_fonts still checks their glyphs */
+.tx-copies { position: absolute; left: 0; top: 0; pointer-events: none; visibility: hidden; }
+.tx-copy { position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-sizing: border-box; }
+
+/* tinted copies (extrusion sides, RGB split): one flat colour, no inherited decoration */
+.tx-tint { -webkit-text-fill-color: currentColor; text-shadow: none; -webkit-text-stroke: 0; filter: none; background: none; }
+.tx-tint * { color: inherit !important; -webkit-text-fill-color: currentColor !important; text-shadow: none !important;
+             -webkit-text-stroke: 0 !important; background: none !important; filter: none !important; }
+
+/* motion-blur ghosts of split units: stacked on the unit, written by TypeFX */
+.tx-ghost { position: absolute; left: 0; top: 0; pointer-events: none; }
+
+/* glyph outlines (js/glyphs.js) and raster type canvases */
+.tx-svg { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.tx-canvas { position: absolute; left: 0; top: 0; pointer-events: none; }

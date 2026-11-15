@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "policy": "Third-party runtime libraries are NOT stored in this repository. new_project.mjs (or install_vendor.mjs) downloads each from its official registry, checks the archive integrity and the sha256 of every file, and copies the files unmodified — licence notices intact — into the project, so a video plays offline from file://. Never edit, minify, rename or strip the notices of these files.",
+  "libs": [
+    {
+      "id": "gsap",
+      "name": "GSAP",
+      "version": "3.15.0",
+      "license": "GSAP Standard \"no charge\" License",
+      "licenseUrl": "https://gsap.com/standard-license",
+      "licenseNote": "Free for commercial use, all plugins included. Not allowed: use in tools that let users build visual animations without code and compete with Webflow’s visual animation building; reverse engineering for competing products; removing or altering GSAP’s notices. AI-generated GSAP code is explicitly allowed (licence FAQ).",
+      "source": "npm registry, package gsap@3.15.0",
+      "archive": {
+        "url": "https://registry.npmjs.org/gsap/-/gsap-3.15.0.tgz",
+        "type": "tgz",
+        "integrity": "sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==",
+        "bytes": 1697897
+      },
+      "files": [
+        {
+          "dest": "vendor/gsap/gsap.min.js",
+          "member": "package/dist/gsap.min.js",
+          "sha256": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb",
+          "bytes": 72927
+        },
+        {
+          "dest": "vendor/gsap/SplitText.min.js",
+          "member": "package/dist/SplitText.min.js",
+          "sha256": "419f7027a5f086a12cb7988736d8fdd3a6ed2200229661de25b6628ca7ced344",
+          "bytes": 7732
+        },
+        {
+          "dest": "vendor/gsap/CustomEase.min.js",
+          "member": "package/dist/CustomEase.min.js",
+          "sha256": "466e426a5c60c21c94b15a30a3dffacac9bb39ce8f4e07d071d7d4bb1be43390",
+          "bytes": 7143
+        },
+        {
+          "dest": "vendor/gsap/CustomBounce.min.js",
+          "member": "package/dist/CustomBounce.min.js",
+          "sha256": "e6c138934bbf4c25a0bfdba616aa6114da2641f86c9ee1fffdbf6b6f57ff0608",
+          "bytes": 2068
+        },
+        {
+          "dest": "vendor/gsap/CustomWiggle.min.js",
+          "member": "package/dist/CustomWiggle.min.js",
+          "sha256": "606fa03b6e37dbf4d12c3237a1967c3ed9a016bbd1ac600bbe6621673c7935d6",
+          "bytes": 2274
+        },
+        {
+          "dest": "vendor/gsap/DrawSVGPlugin.min.js",
+          "member": "package/dist/DrawSVGPlugin.min.js",
+          "sha256": "beb19529f54c1212f1f5117d027be01afda2f363a4926d32aa979bc11140edc1",
+          "bytes": 4351
+        },
+        {
+          "dest": "vendor/gsap/MorphSVGPlugin.min.js",
+          "member": "package/dist/MorphSVGPlugin.min.js",
+          "sha256": "19c891a412240d8521b13330813d9b551ea5b0f707907c365ffecaf1dfa0f5cf",
+          "bytes": 21195
+        },
+        {
+          "dest": "vendor/gsap/MotionPathPlugin.min.js",
+          "member": "package/dist/MotionPathPlugin.min.js",
+          "sha256": "ace44a07c6c179f5347d9b46a152d468e4c9f272ee0d68bf0354e00d60000693",
+          "bytes": 22002
+        },
+        {
+          "dest": "vendor/gsap/TextPlugin.min.js",
+          "member": "package/dist/TextPlugin.min.js",
+          "sha256": "a24984fa1a33517b4c54c8b25b0bfd7aaf3df9fa7edba661e3bd496a671a2429",
+          "bytes": 10570
+        },
+        {
+          "dest": "vendor/gsap/ScrambleTextPlugin.min.js",
+          "member": "package/dist/ScrambleTextPlugin.min.js",
+          "sha256": "a2cfaa7223231459dfde37e9385413ee6df065f18121e946ffdde694f8b11f01",
+          "bytes": 11687
+        }
+      ]
+    }
+  ]
+}

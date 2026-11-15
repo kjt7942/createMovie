@@ -1,0 +1,155 @@
+{
+  "skill_name": "script-to-motion",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "아래 대본으로 설명 영상 만들어줘. 유튜브에 올릴 거야.\n\n요즘 회의가 너무 많다고 느끼시나요? 직장인은 일주일에 평균 12시간을 회의에 씁니다. 그런데 그중 절반은 결론 없이 끝나죠. 문제는 회의 자체가 아니라, 준비 없는 회의입니다. 오늘은 회의 시간을 반으로 줄이는 세 가지 규칙을 알려드릴게요. 첫째, 안건은 하루 전에 공유하세요. 둘째, 회의는 25분을 넘기지 마세요. 셋째, 끝나기 전에 누가 무엇을 언제까지 할지 정하세요. 이 세 가지만 지켜도, 여러분의 수요일 오후가 달라질 겁니다.",
+      "expected_output": "16:9 explainer project folder: script split into ~10-12 cues without rewording, numbers spelled for TTS (12시간→열두 시간, 25분→이십오 분), no Fish call during the build and no stop to get the lines approved: the whole video is finished on silent placeholders (or \"narration\": false without a key and voice id, the hand-off saying it can be voiced later), and the hand-off asks whether to record it in the user's voice now; script.txt holds the script as plain text, a storyboard with a recurring visual idea, the three rules revealed as they are spoken, 12 and 절반 as hero visuals; check.mjs and smoke.mjs clean; hand-off explains recording.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "쇼츠용 세로 영상 만들어줘! 빠르고 경쾌한 느낌으로.\n\n집중이 안 될 때, 딱 25분만 버텨보세요. 이름하여 포모도로 기법! 1980년대 이탈리아의 한 대학생이 토마토 모양 주방 타이머로 시작한 방법이에요. 25분 집중하고, 5분 쉬고. 이걸 4번 반복하면 긴 휴식 30분. 오늘 할 일, 토마토 네 개로 끝내볼까요?",
+      "expected_output": "9:16 (1080x1920) project, energetic motion language, numbers pronounced correctly (이십오 분, 천구백팔십 년대, 오 분, 네 번, 삼십 분) while the screen shows digits, a timer/tomato visual idea, fast pacing; checks clean.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "우리 동네 빵집 소개 영상 대본이야. 따뜻하고 감성적인 분위기로 부탁해.\n\n[장면 1 - 새벽]\n새벽 네 시, 골목에서 가장 먼저 불이 켜지는 곳이 있습니다.\n[장면 2 - 반죽]\n삼십 년째 같은 손으로, 같은 시간에 반죽을 시작합니다. 천천히 발효시킨 빵은 기다린 만큼 깊은 맛을 냅니다.\n[장면 3 - 손님]\n단골 손님들은 말합니다. \"여기 빵은 하루를 시작하게 해줘요.\"\n[엔딩]\n오늘도 따뜻한 빵이 기다리고 있습니다. 소담 베이커리.",
+      "expected_output": "16:9 warm, slow brand film: stage directions ([장면 …]) used for scene structure but not narrated, quote treated as a quote, calm easing and warm palette, ending on the bakery name holding; checks clean.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "숫자가 크게 강조되는 30초짜리 인트로 만들어줘. 제목은 빛나는 네온 느낌으로, 숫자는 슬롯머신처럼 굴러가게.\n\n지난 1년, 우리 서비스는 1,280,000명이 사용했습니다. 하루 평균 3,500명. 그리고 오늘, 새로운 시작을 알립니다.",
+      "expected_output": "Glowing headline and rolling-digit numbers WITHOUT faint rectangles behind the letters: no text-shadow on SplitText-masked text or on clipped digit columns (glow via filter: drop-shadow, e.g. FXKit odometer/chars); snapshot.mjs reports no 'glow clipped into a box' warning; no scrambleText (check.mjs clean); numbers spelled for TTS (백이십팔만 명, 삼천오백 명).",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "이 영상에는 배민 한나체랑 맑은 고딕을 써줘. 그리고 유튜브에 올릴 거야.\n\n바다는 지구 표면의 70%를 덮고 있습니다. 하지만 우리가 아는 바다는 아주 일부입니다.",
+      "expected_output": "Refuses both requested fonts (BM Hanna: own licence, not SIL OFL 1.1; Malgun Gothic: system font), explains the SIL OFL 1.1-only rule in one or two sentences and uses the closest catalogue fonts instead (e.g. Black Han Sans / Jua for the display look, Pretendard for body); fonts are downloaded by new_project.mjs/add_font.mjs with sha256 + OFL licence check; check.mjs and check_fonts.mjs pass.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "심해 탐사 느낌의 1분 영상 만들어줘. 잠수정이 내려가면서 물고기 떼, 해파리, 고래가 지나가고 바닥에 착지하는 장면이 있으면 좋겠어.\n\n햇빛이 닿는 곳을 지나면, 바다는 점점 어두워집니다. 천 미터 아래부터는 스스로 빛을 내는 생물만이 길을 밝힙니다. 그리고 마침내, 바닥에 닿습니다.",
+      "expected_output": "Illustrations as js/art modules with build(el) → { animate(t) } (references/art-library.md), each previewed with preview_art.mjs (deterministic); particles/snow on Canvas 2D in onFrame(t), text and vector art in DOM/SVG; attached elements (lamp glare/flare on the sub, beam) stay attached through camera moves; relative shake on landing; snapshot --perf playback p95 under 8 ms; check/smoke clean; the agent looked at the dive on render.py sheets (whole video, then the camera moves at --gapframe 3).",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "\"기록이 깨졌다\"는 문장이 나오는 30초짜리 스포츠 하이라이트 영상 만들어줘. 글자가 진짜 유리처럼 깨지고, 마지막엔 선수 이름이 한글 자모로 하나씩 날아와 조립되면 좋겠어. 그리고 '전설'이라는 단어는 금속처럼 두껍고 입체적으로.",
+      "expected_output": "Uses TypeFX: the record number shatters (copies + shatter with impact at the stressed word, FXKit flash/burst/shake at TX.stageXY), the athlete name is built with text_to_paths.mjs (catalogue OFL font, glyphs.json) and assembled from glyph pieces (jamo), '전설' uses extrude (offset or z with a 3D turn) or three.js extrusion from TX.shapes. The lines stay readable while spoken. check.mjs (glyph provenance), check_fonts.mjs (outlines + canvas text) and snapshot.mjs --seekcheck pass; render.py --screenshot at --gapframe 1–3 across each break, looked at by the agent.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "심해 다큐 인트로에서 '수압'이라는 단어가 실제로 짓눌리고, '사라진다'는 단어는 먼지처럼 흩어졌으면 해. 프리셋에 없는 느낌이면 직접 만들어줘.",
+      "expected_output": "Writes a custom TX.fx effect for 수압 (closed-form squash/buckle with u.r hashes, no Math.random), uses raster tiles + dissolve (or a custom tile effect) for 사라진다 with a catalogue family that covers every character; explains the effect choice by meaning; --seekcheck and check_fonts pass.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "영문 타이틀 DEEP SEA는 글자 폭이 숨 쉬듯 늘었다 줄었다 하고, 한글 부제는 배민 도현체 느낌으로 해줘. 둘 다 상업적으로 써도 되는 폰트여야 해.",
+      "expected_output": "Installs Google Fonts OFL families with add_font.mjs (e.g. \"Anybody\" for width, \"Do Hyeon\"), recorded in fonts/fonts.lock.json; animates the width axis with TypeFX breathe({ axis: 'wdth' }) or a custom vary effect; explains both are SIL OFL 1.1; refuses Apache/UFL or non-OFL alternatives; check.mjs and check_fonts.mjs pass.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "고래 이야기 쇼츠 만들어줘. 인터넷에서 고래 사진이랑 잔잔한 배경음악 찾아서 넣고, 유명 애니 캐릭터가 설명하는 느낌으로.",
+      "expected_output": "Explains that every resource is made originally unless the user provides it: draws the whale and all visuals itself (SVG/canvas/js/art), does not download photos or music, does not reproduce an existing anime character (designs an original narrator character instead), and offers to use files the user provides (recorded in provenance.json). check.mjs passes with no undeclared media files.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "이 대본으로 1분짜리 영상 만들어줘. (Fish Audio 키나 음성 ID는 주지 않음)\n\n바다는 지구 표면의 70퍼센트를 덮고 있습니다. 하지만 우리가 자세히 아는 바다 밑은 아직 일부뿐입니다.",
+      "expected_output": "Does not call Fish Audio and does not pick a voice: sets \"narration\": false, runs tts.mjs (silent audio, cues timed by reading time), designs the scenes so the lines read on screen; check.mjs shows no placeholder warning; the hand-off says the video has no narration and that providing a Fish Audio API key and voice id adds it.",
+      "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "이 시연 녹화(assets/user/rec_demo.mp4, 3840×1750)에서 생성 버튼을 짚어 주는 장면을 만들어줘. 버튼 위치는 x 3120, y 1490 근처야.",
+      "expected_output": "Lists the recording in provenance.json and js/media-src.js (media_info.mjs), shows it in RecKit.browser() with the whole page in view — no camera zoom into the recording — highlights the button with spot.on(...) (everything else dimmed, one pen loop) and puts the readable text in a callout in the dimmed area linked by a leader that ends outside the loop; first looks at the recording itself with render.py <file> --screenshot --out screenshots/clips/rec_demo to find the button and timing, cuts render stills (stills.mjs --out media/render-stills) and checks the scene on render.py sheets, then check.mjs/errscan.mjs.",
+      "files": []
+    },
+    {
+      "id": 16,
+      "prompt": "\"번아웃은 어떻게 퍼질까\" 1분 영상 만들어줘. 표현을 최대한 풍부하게, 특히 '퍼진다'는 장면은 잉크가 번지듯이.",
+      "expected_output": "Decides each beat's content and primary effect from the script first, then looks up the techniques with cokacmotion.mjs search (e.g. 잉크 번짐 → an SVG-filter or fluid demo), reads that demo's NOTES.md and the main.js lines it points to, and re-implements the technique in project code: classic scripts, onFrame(t) with local time from the cue, rand(seed), the project's W×H, heavy work baked so it plays in real time. Never loads demo files, ES modules, node_modules or fontsource; reuses nothing the demo depicts (its subject, scene, colours, 9:16 frame) — the spreading shows burnout's own subject. Notes demo id + one-sentence technique per beat in storyboard.md References, a source comment on ported code, check.mjs passes, and the hand-off names the cokacmotion techniques used.",
+      "files": []
+    },
+    {
+      "id": 17,
+      "prompt": "\"바다는 왜 짤까?\"를 주제로 유튜브 영상 만들어줘.",
+      "expected_output": "Treats the one-line topic as enough and does not ask questions or stop to show the lines: researches with the web search/fetch tools (primary sources, numbers cross-checked, dated where they change), writes research.md (facts in its own words with sources, what it added, disagreements), puts the plan (audience, one-sentence message, hook, ~2 min 16:9 default, spine with cue ranges) at the top of storyboard.md, writes the narration by script-writing.md (understood on first hearing: conclusion and count first, one idea per sentence; every technical term said exactly and explained; one exact official name per thing; spoken not written Korean with 75/25 endings and filler words only where they do a job; never 솔직히; numbers interpreted; no copied sentences), then builds and verifies the whole video on silent placeholders (no Fish call) with script.txt written. The hand-off lists the defaults chosen, the facts added from research, points to script.txt / storyboard.md / research.md, and asks whether to record the narration in the user's voice. check.mjs, smoke.mjs and check_fonts.mjs pass.",
+      "files": []
+    },
+    {
+      "id": 18,
+      "prompt": "아래 기획서대로 1분짜리 영상 만들어줘.\n\n[기획서]\n- 대상: 처음 창업한 1인 사업자\n- 목표: 세금 신고 기한을 놓치지 않게 하기\n- 꼭 들어갈 문장: \"5월 31일, 이 날짜 하나만 기억하세요.\"\n- 장면 1: 달력이 넘어가다 5월 31일에서 멈춤\n- 장면 2: 놓쳤을 때 생기는 가산세를 숫자로\n- 마지막: 체크리스트 3개\n- 금지: 특정 세무 앱이나 회사 이름 언급",
+      "expected_output": "Reads the plan into a requirement table at the top of storyboard.md (item, source wording, where met by cue/scene, status) and keeps everything it fixes: audience, ~1 minute, the required sentence verbatim in text (spoken forms only in say: 오월 삼십일 일), the three scenes in order (calendar stopping on May 31, the penalty as numbers, a three-item checklist), no app or company names. Researches what the plan leaves open (current deadline and penalty rules from official sources, dated, in research.md) and writes the rest of the narration; does not stop for approval; finishes the video on silent placeholders with script.txt and asks whether to record. The hand-off notes any plan item it could not meet exactly. check.mjs and smoke.mjs pass.",
+      "files": []
+    },
+    {
+      "id": 19,
+      "prompt": "검수할 때 2배속으로 보다가 바로 R 눌러서 화면 녹화했는데 괜찮아? 그리고 render.py로 뽑을 때는 배속 영향 없지?",
+      "expected_output": "Answers the question directly and stops: the Shift+>/< speed is a review tool; R resets the player to 1× before playing from the start, so a recording started with R plays narration and clips at 1×; render.py never uses the player's speed — it seeks frame by frame and muxes the original audio files at 1× (clip sound with a rate other than 1 is refused). No files are changed.",
+      "files": []
+    },
+    {
+      "id": 20,
+      "prompt": "우리 회사 소개 영상 1분짜리 만들어줘. 강점 세 가지(빠른 납기, 24시간 지원, 업계 최저 불량률 0.3%)랑 연혁(2015 창업, 2019 공장 증설, 2024 해외 진출)을 넣어줘.",
+      "expected_output": "No frame is PPT or document design. That means no title bar with content, no cards or panels holding text, no icon-heading-description tiles for the three strengths, no bullet list, no table, no box timeline for the history and no slide-like scene swaps. The strengths are shown as pictures and acting type (e.g. something arriving early, a clock that never stops, 0.3% as hero type or material), the history as one travelling object or camera move through a continuous world, and transitions as match cuts. Any box on screen is a story object drawn with material and light. The storyboard notes the no-slides check, render.py sheets the agent looked at show no slide-like frame, and check.mjs and smoke.mjs pass.",
+      "files": []
+    },
+    {
+      "id": 21,
+      "prompt": "\"물은 어떻게 구름이 될까\" 2분 설명 영상 만들어줘. 영화처럼 연출해줘.",
+      "expected_output": "storyboard.md is a shot list. Each cue has a shot size and angle, a camera move with its reason (or a still camera), blocking and light, the cut in and out, and the colour, plus a colour script and one screen direction for progress. Structure is mixed: inside each chapter the water cycle is one continuous world the camera travels through (sea → vapour rising → cloud forming), and chapter changes are cuts with the signature transition. Camera moves follow the words (a push-in when the line points at something, a pull-out for the whole), cuts fall on phrase boundaries with J-cuts as the default joint, and the result is withheld until the words name it. There is no habitual slow zoom, and no effect or match cut is added to fill a count. No slide or box layouts. check.mjs and smoke.mjs pass.",
+      "files": []
+    },
+    {
+      "id": 22,
+      "prompt": "[c05] 0:41.20 / 1:58.00 제목이 너무 늦게 나와. 0.3초만 당겨줘.",
+      "expected_output": "Context: a finished project in a review round. The agent moves the title's entrance 0.3 s earlier in scenes.js (anchored to the cue, not an absolute time) and runs check.mjs and errscan.mjs. Because the user asked for this fix, it does not shoot render.py sheets or snapshots to measure the result. It answers with the same time and cue id and what changed.",
+      "files": []
+    },
+    {
+      "id": 23,
+      "prompt": "(작업 중 스스로 돌린 검사) snapshot.mjs --overview --seekcheck 결과: \"✖ seekcheck: 10 of 120 frames differ … t=66.30 (reverse order, reached from t=74.30) — picture differs: 812 px in 40×22 at 913,402 — no listed property explains it\". 원인을 찾아서 고쳐줘.",
+      "expected_output": "Context: the agent's own first build, so it looks. It looks at the difference only with render.py: `python3 <dir>/render.py <dir> --screenshot --at 66.3 --via 74.3` (the command the check printed), adding `--crop` around the reported box and `--res 4k` to see it closer, and opens only the sheet paths render.py prints. It never writes or runs a probe that takes screenshots (page.screenshot, CDP captureScreenshot), never builds its own diff image, and never opens an image other than a render.py sheet; DOM measurement goes through snapshot.mjs's report. It fixes the cause in code (state derived from t, no write-skipping cache), re-runs the seekcheck, and reports which frames were fixed.",
+      "files": []
+    },
+    {
+      "id": 24,
+      "prompt": "공룡 화석 그림(js/art/creatures.js의 ART.fossil)을 새로 다듬었어. 두개골의 이빨이랑 작은 금 같은 세부까지 제대로 그려졌는지 확인하고 더 좋게 다듬어줘.",
+      "expected_output": "Context: a project whose illustration module ART.fossil exists. The agent checks the module with preview_art.mjs (errors, determinism — no picture) and looks at it only with `python3 <dir>/render.py <dir> --screenshot --art fossil --viewbox \"…\" --at …`, using `--res 4k` (or `--crop` in a scene with `--res 4k`) for the teeth and cracks. It does not open preview_art or .snapshots images (there are none), does not write a page or script that screenshots the module, and does not grab frames with ffmpeg. It iterates on the module and shows the module inside its scene with `--at` sheets before hand-off.",
+      "files": []
+    },
+    {
+      "id": 25,
+      "prompt": "이 화면의 작은 설명 글씨(c17 분수 아래)가 480p 시트에서는 안 읽혀. 제대로 보이는지 네가 직접 확인하고 필요하면 고쳐줘.",
+      "expected_output": "The agent looks at that moment with render.py only: `--screenshot --at <c17 time> --res 1080p`, then `--crop X,Y,W,H --res 4k` around the caption, and opens those sheets. It does not render an MP4 and extract a frame, does not take a browser screenshot, and does not ask the user to check it in the browser instead. It fixes size/contrast if needed, looks again with the same command, and names the time and cue id.",
+      "files": []
+    },
+    {
+      "id": 26,
+      "prompt": "assets/user/rec_demo.mp4(3840×1750 화면 녹화) 14초쯤에 오른쪽 위 작은 '생성' 버튼 옆 글씨가 뭐라고 쓰여 있는지 확인하고, 그 버튼을 짚는 장면을 만들어줘.",
+      "expected_output": "The agent looks at the recording only through render.py on the video file: a range sheet to find the moment, then `python3 <dir>/render.py <dir>/assets/user/rec_demo.mp4 --screenshot --at 14 --crop X,Y,W,H --out <dir>/screenshots/clips/rec_demo` (the button's corner in the recording's own pixels, shown 1:1) or `--res 1080p`, and opens only those sheets. It never extracts a frame with ffmpeg, never writes a screenshot script, and never opens an image that render.py did not print. It reads the label from the sheet, then builds the scene with RecKit (whole page shown, spot + callout, no zoom into the recording) and reports the time and cue.",
+      "files": []
+    },
+    {
+      "id": 27,
+      "prompt": "\"바다는 왜 짤까?\"를 주제로 유튜브 영상 만들어줘.",
+      "expected_output": "Besides researching, writing, building and passing the gates, the agent runs the elevation pass (SKILL.md 7b, references/elevate.md) without being asked: fresh render.py sheets (whole video, chapters, transitions, hero frames), an art-director subagent briefed with the looking rule word for word that scores each chapter 1–5 on 연출, 그래픽 디자인 and 모션 with tile ids, lists floor violations and ranks concrete upgrades; the agent rebuilds the weak beats from their concept (cokacmotion techniques), re-shoots before/after, and repeats up to three rounds or until every chapter is ≥ 4. The hand-off reports the scores before → after and the before/after sheet paths. It never stops at 'no defects found'.",
+      "files": []
+    },
+    {
+      "id": 28,
+      "prompt": "\"번개는 얼마나 멀리서 쳤을까?\"를 주제로 영상 만들어줘.",
+      "expected_output": "Before any shot list the agent writes a world bible at the top of storyboard.md (SKILL.md → A crafted world from the first build, references/cinematic-look.md §2): one physical world the film happens in chosen from what the subject physically is or where it happens, each chapter's place or object, one motivated key light per chapter, materials and how each is made, the depth plan, type made of the world's material, the recurring object's physical form, the camera language and a signature transition from the world. It builds and looks at one look-dev hero frame per chapter at 1080p and has the art director score them before building the rest. The first build already shows lit, material, layered scenes with a camera language chosen for that world, and the world bible names which choices it changes from earlier films — never thin lines and small diagrams on a dark gradient with labels beside them; the director scores on the absolute scale (the infographic look ≤ 2 on design) and weak beats are rebuilt from the world bible, never decorated with particles or labels.",
+      "files": []
+    }
+  ]
+}
