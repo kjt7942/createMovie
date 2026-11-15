@@ -83,3 +83,28 @@
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
   refresh(); setInterval(refresh, 3000);
 })();
+
+// GPU가 있어야 쓸 수 있는 화면(캐릭터 생성, 콘텐츠 생성)용 안내. AI 영상 생성 화면과 같은 기준(/h3/api/availability)을 쓴다.
+// 쓸 수 없으면 만들기 양식을 감추고 이유를 보여 준다. 이미 만든 결과 목록은 그대로 보인다.
+window.gpuGate = async (noun, formSel = '#new') => {
+  const st = await fetch('/h3/api/availability').then(r => r.json()).catch(() => null);
+  if (!st || (st.ok && st.local)) return st;
+  const e = (tag, text, css) => { const n = document.createElement(tag); if (text) n.textContent = text; if (css) n.style.cssText = css; return n; };
+  const title = !st.local ? `${noun}은 서비스가 실행 중인 PC에서만 쓸 수 있습니다. 서버 PC의 브라우저에서 접속하세요`
+    : !st.gpu_ok ? `NVIDIA 그래픽카드가 없는 환경에서는 ${noun}을 쓸 수 없습니다`
+    : `${noun} 도구(Wan2GP와 모델)가 설치되어 있지 않아 쓸 수 없습니다`;
+  const box = e('section', '', 'margin:14px 0;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)');
+  box.id = 'gpuNotice'; box.setAttribute('role', 'alert');
+  box.append(e('h2', title, 'margin:0 0 8px;font-size:17px'));
+  for (const r of (st.local ? st.reasons : [])) box.append(e('div', r, 'padding:10px 14px;border-radius:10px;margin:8px 0;background:var(--warn-soft);color:var(--warn);font-size:14px'));
+  box.append(e('div', '사진으로 만드는 홍보 영상은 GPU 없이도 쓸 수 있습니다.', 'color:var(--mute);font-size:13px;margin:8px 0'));
+  const row = e('div', '', 'display:flex;gap:14px;font-size:14px');
+  const link = (href, t) => { const a = e('a', t); a.href = href; return a; };
+  row.append(link('/', '홍보 영상으로 이동'));
+  if (st.local) row.append(link('/setup', '설치·점검 안내 보기'));
+  box.append(row);
+  document.querySelector('main').prepend(box);
+  const form = document.querySelector(formSel);
+  if (form) form.style.display = 'none';   // hidden 속성은 화면 CSS의 display가 이기므로 스타일로 감춘다
+  return st;
+};

@@ -67,6 +67,7 @@ figure img { cursor:zoom-in; }
 </main>
 <div id="lb" role="dialog" aria-modal="true" aria-label="이미지 크게 보기"><img alt=""><div class="bar"><button id="lbp">← 이전</button><span id="lbt"></span><button id="lbn">다음 →</button><button id="lbk"></button><button id="lbc">닫기 (Esc)</button></div></div>
 <script>
+gpuGate('캐릭터 생성');   // GPU가 없으면 양식 대신 안내를 보여 준다
 const WORD = { ready: '대기 전', queued: '대기열에 있음', running: '생성 중', done: '완료', error: '문제 있음', stopped: '멈춤' };
 const ITEM = { pending: '대기', running: '생성 중', failed: '실패' };
 const VIEW = { front: '정면', side: '옆', back: '뒤', pose: '포즈' };
