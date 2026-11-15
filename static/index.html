@@ -292,6 +292,9 @@
     <div class="head"><h1>영상에 쓸 사진과 음악을 올려 주세요</h1>
       <p>사업이나 주제별로 정리한 폴더를 통째로 올리면, 폴더 이름이 장면 주제가 됩니다.</p></div>
     <div class="panel">
+      <label class="field" style="margin-bottom:16px"><span>프로젝트 이름</span>
+        <input class="input" id="pname" maxlength="40" placeholder="예: 2026 가족캠프 홍보 (비워 두면 '홍보영상')" autocomplete="off">
+        <small id="pnameHint" style="color:var(--mute)">자료를 처음 올릴 때 projects 폴더 아래에 "날짜시분초_프로젝트명" 폴더가 만들어집니다. 만든 뒤에는 바꿀 수 없어요.</small></label>
       <div class="drop" id="drop">
         <div>
           <div class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></div>
@@ -605,7 +608,7 @@ async function openProject(j) {
   if (!r) return;
   clearInterval(poll);
   loading = true; $('#projDlg').open && $('#projDlg').close();
-  job = j; meta = r.meta; plan = r.plan; const st = r.settings || {};
+  job = j; meta = r.meta; plan = r.plan; const st = r.settings || {}; pnameUI();
   rev = st._rev || null; showConflict(false);
   $('#brief').value = st.brief || ''; $('#org').value = st.org || ''; $('#logoDef').checked = false;
   press('#mood', $$('#mood button').find(b => b.textContent === st.mood) || $('#mood button'));
@@ -634,7 +637,7 @@ async function openProject(j) {
 function newProject() {
   clearInterval(poll);
   rev = null; showConflict(false);
-  job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null;
+  job = ''; meta = {photos: [], audio: null}; plan = null; reached = 1; audioKey = ''; pendingSel = null; pnameUI();
   $('#video').removeAttribute('src'); $('#brief').value = ''; $('#org').value = ORG_DEFAULT; $('#logoDef').checked = true; $('#length').value = 30; $('#lenAuto').checked = false; $('#beatSync').checked = true; $('#blurOn').checked = false; $('#progOn').checked = false; setOrder('ai'); $('#subOn').checked = true; discIn('');
   press('#logoMode', $('#logoMode button'));
   press('#ratio', $('#ratio button')); applyRatio(); press('#style', $('#style button')); $('#narrOn').checked = false; $('#narrOpts').hidden = true; press('#bgmVol', $$('#bgmVol button')[2]);
@@ -669,6 +672,11 @@ $('#pickDir').onclick = () => $('#fDir').click();
 $('#fFiles').onchange = e => { upload([...e.target.files].map(f => ({f, path: f.name}))); e.target.value = ''; };
 $('#fDir').onchange = e => { upload([...e.target.files].map(f => ({f, path: f.webkitRelativePath || f.name}))); e.target.value = ''; };
 
+function pnameUI() {   // 폴더가 만들어진 뒤에는 이름 칸을 잠그고 실제 폴더 이름을 보여 준다
+  const nm = job.replace(/^\d{14}_/, '');
+  $('#pname').disabled = !!job; $('#pname').value = job ? (nm === job ? '' : nm.replace(/_/g, ' ')) : '';
+  $('#pnameHint').textContent = job ? `프로젝트 폴더: projects/${job}` : '자료를 처음 올릴 때 projects 폴더 아래에 "날짜시분초_프로젝트명" 폴더가 만들어집니다. 만든 뒤에는 바꿀 수 없어요.';
+}
 async function upload(items) {
   const all = items.length;
   items = items.filter(x => /\.(jpe?g|png|webp|mp3|mp4|mov|m4v|webm)$/i.test(x.path));
@@ -681,11 +689,11 @@ async function upload(items) {
   for (const [bi, batch] of batches.entries()) {
     const i = done; done += batch.length;
     $('#uplTxt').textContent = `${done} / ${items.length}` + (batch.some(x => /\.(mp4|mov|m4v|webm)$/i.test(x.path)) ? ' · 동영상 처리 중' : '');
-    const fd = new FormData(); fd.append('job', job);
+    const fd = new FormData(); fd.append('job', job); fd.append('name', $('#pname').value.trim());
     batch.forEach(x => { fd.append('files', x.f); fd.append('paths', x.path); });
     const r = await fetch('/api/upload', {method:'POST', body:fd}).then(r => r.json()).catch(() => null);
     if (!r || !r.job) { $('#e1').textContent = '업로드가 중간에 멈췄습니다. 한 번에 올리는 양을 줄이거나 다시 시도해 주세요.'; break; }
-    job = r.job; meta = r; $('#uplBar').style.width = Math.min(100, done / items.length * 100) + '%';
+    job = r.job; meta = r; pnameUI(); $('#uplBar').style.width = Math.min(100, done / items.length * 100) + '%';
     renderAssets();
   }
   const skipped = all - items.length + (meta.skipped || []).length;

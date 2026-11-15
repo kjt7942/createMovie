@@ -14,8 +14,12 @@ PY = WAN / "env_venv" / "Scripts" / "python.exe"
 FFMPEG = WAN / "ffmpeg_bins" / "ffmpeg.exe"
 FFPROBE = WAN / "ffmpeg_bins" / "ffprobe.exe"
 GPU_SAFE = ROOT / "tools" / "gpu-safe.ps1"
-PROJECTS = ROOT / "jobs" / "studio"
-CHARACTERS = ROOT / "jobs" / "characters"
+try:
+    from . import ids as projid  # ids라는 이름은 함수 인자로 쓰이므로 다른 이름으로 가져온다
+except ImportError:   # studio/test_engine.py처럼 패키지 밖에서 가져올 때
+    import ids as projid
+PROJECTS = projid.PROJECTS     # 모든 프로젝트 폴더(날짜시분초_이름)가 한 곳에: project.json이 있으면 AI 영상, character.json이 있으면 캐릭터
+CHARACTERS = projid.PROJECTS
 SETTINGS = ROOT / "jobs" / "settings.json"
 
 MODEL = "minimax_h3_fl2va_pruned_pdd"
@@ -87,7 +91,7 @@ def license_notice():
             "MiniMax(api@minimax.io)에서 별도 라이선스를 받았다면 .env에 H3_LICENSE_GRANTED=1을 넣으면 이 안내가 사라집니다.")
 
 
-ID_RE = re.compile(r"^[0-9a-f]{12}$")
+ID_RE = projid.VALID  # 날짜시분초_이름, 예전 12자리 16진수도 허용
 
 
 class StudioError(Exception):
@@ -489,7 +493,7 @@ def load_cast(ids):
 
 def create_project(script, size, loop, seed=None, characters=()):
     project = {
-        "id": uuid.uuid4().hex[:12], "created": time.time(), "script": script, "size": size, "loop": bool(loop),
+        "id": projid.new_id((script or {}).get("title"), "AI영상", root=PROJECTS), "created": time.time(), "script": script, "size": size, "loop": bool(loop),
         "seed": random.randint(1, 2 ** 31 - 1) if seed is None else int(seed), "scene_seeds": True,
         "status": "ready", "message": "", "scene_results": {}, "version": 1, "warnings": [],
     }
@@ -571,7 +575,7 @@ def create_character(name, description, images):
     if not views:
         raise StudioError("이미지를 한 장 이상 올리세요.")
     pictures = [_character_image(images[v]) for v in views]
-    cid = uuid.uuid4().hex[:12]
+    cid = projid.new_id(name, "캐릭터", root=CHARACTERS)
     tmp = CHARACTERS / f".new-{cid}"
     tmp.mkdir(parents=True)
     try:
@@ -728,26 +732,26 @@ def _dir_size(path):
 
 def storage_report():
     """Disk use per project. The numbers are for choosing what to delete, so a folder that cannot be read just counts less."""
-    rows = []
-    jobs = PROJECTS.parent
-    for d in jobs.iterdir() if jobs.exists() else []:
-        if not ID_RE.match(d.name):
-            continue
-        try:
-            title = json.loads((d / "plan.json").read_text(encoding="utf-8")).get("title")
-        except (OSError, ValueError, AttributeError):
-            title = None
-        rows.append({"kind": "promo", "id": d.name, "title": title or "제목 없음", "size": _dir_size(d)})
-    spare = 0
+    rows, spare = [], 0
     for d in PROJECTS.iterdir() if PROJECTS.exists() else []:
-        spare += sum(_dir_size(d / n) for n in ("versions", "work")) if ID_RE.match(d.name) else _dir_size(d)
-        try:
-            p = load_project(d.name)
-            rows.append({"kind": "h3", "id": d.name, "title": p["script"]["title"], "size": _dir_size(d), "status": p["status"]})
-        except (StudioError, ValueError, KeyError, OSError):
+        if not ID_RE.match(d.name):   # .trash-, .new- 같은 지우다 만 폴더는 통째로 정리 대상
+            spare += _dir_size(d)
             continue
+        if (d / "meta.json").exists():   # 홍보 영상
+            try:
+                title = json.loads((d / "plan.json").read_text(encoding="utf-8")).get("title")
+            except (OSError, ValueError, AttributeError):
+                title = None
+            rows.append({"kind": "promo", "id": d.name, "title": title or "제목 없음", "size": _dir_size(d)})
+        elif (d / "project.json").exists():   # AI 영상
+            spare += sum(_dir_size(d / n) for n in ("versions", "work"))
+            try:
+                p = load_project(d.name)
+                rows.append({"kind": "h3", "id": d.name, "title": p["script"]["title"], "size": _dir_size(d), "status": p["status"]})
+            except (StudioError, ValueError, KeyError, OSError):
+                continue
     try:
-        free = shutil.disk_usage(jobs).free
+        free = shutil.disk_usage(PROJECTS if PROJECTS.exists() else ROOT).free
     except OSError:
         free = None
     return {"items": sorted(rows, key=lambda r: -r["size"]), "spare": spare, "free": free}
@@ -1243,7 +1247,7 @@ class Runner:
         for d in PROJECTS.iterdir() if PROJECTS.exists() else []:
             if d.name.startswith(".trash-"):
                 shutil.rmtree(d, ignore_errors=True)
-            elif d.name != active:
+            elif d.name != active and (d / "project.json").exists():   # AI 영상 프로젝트만. 다른 종류 폴더는 건드리지 않는다
                 for n in ("versions", "work"):
                     shutil.rmtree(d / n, ignore_errors=True)
         return before - storage_report()["spare"]

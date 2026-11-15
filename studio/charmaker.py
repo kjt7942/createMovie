@@ -1,10 +1,10 @@
 """캐릭터 생성 탭. 정면 시안(Qwen-Image) -> 고른 정면으로 다른 시점(Qwen-Image-Edit) -> 고른 이미지로 캐릭터 등록.
 
-시안은 batch 큐에서 만든다(jobs/content/<id>, <id>_v). 초안 정보는 정면 배치의 batch.json "character"에 남는다.
+시안은 batch 큐에서 만든다(projects/<날짜시분초_이름>, <같은 이름>_v). 초안 정보는 정면 배치의 batch.json "character"에 남는다.
 """
 import io, random, time
 
-from . import batch, engine
+from . import batch, engine, ids
 
 T2I, EDIT = "qwen_image_2512_20B", "qwen_image_edit_plus2_20B"  # 이 PC에서 시험한 모델, 둘 다 상업 이용 가능
 SIZES = {"draft": "480x832", "high": "720x1280"}  # 초안 먼저, 마음에 들면 고화질
@@ -70,7 +70,7 @@ def front(name, description, description_ko, size, count, shot="sheet", backgrou
     pictures = [_ref_image(r) for r in refs]
     count = max(1, min(8, int(count or 4)))
     seed = random.randrange(2 ** 31)
-    cid = time.strftime("ch%Y%m%d_%H%M%S") + f"_{random.randrange(16 ** 3):03x}"  # 같은 초에 두 번 만들어도 덮어쓰지 않게
+    cid = ids.new_id(name, "캐릭터", root=batch.CONTENT_ROOT)  # 날짜시분초_캐릭터이름. 같은 초에 같은 이름이면 _2를 붙여 덮어쓰지 않는다
     prompt = " ".join(x for x in (description, background and f"Background: {background}.", SHOTS[shot]) if x)
     job = {"model_type": T2I, "prompt": prompt, "resolution": SIZES[size], "batch_size": 1}
     if pictures:

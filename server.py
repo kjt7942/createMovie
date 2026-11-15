@@ -9,10 +9,11 @@ import beats
 import composer
 import media
 from composer import SCENE_TYPES, STYLES, scene_speech
-from studio import batch, engine, h3_routes
+from studio import batch, engine, h3_routes, ids
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-JOBS = os.path.join(HERE, 'jobs')
+JOBS = str(ids.PROJECTS)   # 모든 프로젝트 폴더(날짜시분초_프로젝트명)가 여기 한 곳에 만들어진다
+SYSTEM = str(ids.SYSTEM)   # 설정·로그·사용량 기록(프로젝트가 아닌 파일)
 MODELS = ['gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite']  # 한도 걸리면 다음 모델
 MAX_VISION = 40  # Gemini에 보여줄 사진 수 상한(초과분은 균등 샘플링)
 
@@ -61,7 +62,7 @@ _key_rr = itertools.count()  # 호출마다 시작 키를 한 칸씩 돌린다
 
 
 def jobdir(job):
-    if not re.fullmatch(r'[0-9a-f]{12}', job or ''):
+    if not ids.VALID.match(job or ''):
         raise ValueError('잘못된 작업 ID')
     return os.path.join(JOBS, job)
 
@@ -81,7 +82,7 @@ _job_locks = collections.defaultdict(threading.RLock)  # meta.json을 읽고 고
 # ---------- 업로드 ----------
 @app.post('/api/upload')
 def upload():
-    job = request.form.get('job') or uuid.uuid4().hex[:12]
+    job = request.form.get('job') or ids.new_id(request.form.get('name'), '홍보영상')   # 처음 올릴 때 폴더가 만들어진다: 날짜시분초_프로젝트명
     d = jobdir(job)
     for sub in ('assets', 'thumbs'):
         os.makedirs(os.path.join(d, sub), exist_ok=True)
@@ -156,7 +157,7 @@ def from_h3(pid):
     final = engine.project_dir(pid) / 'final.mp4'
     if not final.is_file():
         return jsonify(error='완성된 영상이 없습니다.'), 400
-    job = uuid.uuid4().hex[:12]
+    job = ids.new_id(project['script']['title'], '홍보영상')
     d = jobdir(job)
     for sub in ('assets', 'thumbs'):
         os.makedirs(os.path.join(d, sub))
@@ -272,7 +273,7 @@ def gemini(parts):
             with urllib.request.urlopen(req, timeout=90) as r:
                 resp = json.loads(r.read())
             u = {'model': m, **{k: resp.get('usageMetadata', {}).get(k, 0) for k in ('promptTokenCount', 'candidatesTokenCount', 'totalTokenCount')}}
-            with open(os.path.join(JOBS, 'usage.log'), 'a', encoding='utf-8') as lf:  # 호출별 토큰 사용량 기록
+            with open(os.path.join(SYSTEM, 'usage.log'), 'a', encoding='utf-8') as lf:  # 호출별 토큰 사용량 기록
                 lf.write(time.strftime('%Y-%m-%d %H:%M:%S ') + json.dumps(u) + '\n')
             return json.loads(resp['candidates'][0]['content']['parts'][0]['text']), u
         except (OSError, KeyError, IndexError, ValueError) as e:  # URLError·TimeoutError·연결 끊김은 모두 OSError
@@ -660,7 +661,7 @@ class PromoQueue:
         if WORKER_TOKEN or not os.path.isdir(JOBS):
             return
         for j in os.listdir(JOBS):
-            if re.fullmatch(r'[0-9a-f]{12}', j):
+            if ids.VALID.match(j) and os.path.exists(os.path.join(JOBS, j, 'meta.json')):   # 다른 종류 프로젝트 폴더는 건너뛴다
                 try:
                     yield j, get_status(j)
                 except (ValueError, OSError):
@@ -817,7 +818,7 @@ def worker_claim():
     worker_auth()
     now, cands = time.time(), []
     for j in os.listdir(JOBS) if os.path.isdir(JOBS) else []:
-        if not re.fullmatch(r'[0-9a-f]{12}', j):
+        if not ids.VALID.match(j) or not os.path.exists(os.path.join(JOBS, j, 'meta.json')):
             continue
         try:
             s = get_status(j)
@@ -1022,7 +1023,7 @@ def projects():
     out = []
     for j in os.listdir(JOBS) if os.path.isdir(JOBS) else []:
         d = os.path.join(JOBS, j)
-        if not re.fullmatch(r'[0-9a-f]{12}', j) or not os.path.exists(os.path.join(d, 'meta.json')):
+        if not ids.VALID.match(j) or not os.path.exists(os.path.join(d, 'meta.json')):
             continue
         try:
             m = meta_of(j)
@@ -1179,6 +1180,21 @@ def setup_run():
 
 
 os.makedirs(JOBS, exist_ok=True)
+os.makedirs(SYSTEM, exist_ok=True)
+
+
+def legacy_folders():
+    """예전 위치(jobs/ 아래 12자리 ID, jobs/studio·characters·content)에 남은 프로젝트 폴더 수."""
+    n = 0
+    for sub, marker in (('', 'meta.json'), ('studio', 'project.json'), ('characters', 'character.json'), ('content', 'batch.json'), ('contest', 'batch.json')):
+        base = os.path.join(SYSTEM, sub) if sub else SYSTEM
+        if os.path.isdir(base):
+            n += sum(1 for d in os.listdir(base) if os.path.exists(os.path.join(base, d, marker)))
+    return n
+
+
+if legacy_folders():
+    print(f'[안내] jobs 폴더에 예전 방식 프로젝트 {legacy_folders()}개가 남아 있습니다. 목록에 보이게 하려면 한 번 실행하세요: python tools/migrate_projects.py')
 
 if __name__ == '__main__':
     runner.recover()

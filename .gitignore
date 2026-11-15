@@ -8,3 +8,6 @@ models/
 Wan2GP/
 server*.log
 다운로드자료/
+# 프로젝트 폴더(크무·스모 결과물, projects/<날짜시분초_이름>/)는 얼굴 사진·큰 파일이 있어 올리지 않는다. 스모의 PC별 로컬 설정도 제외
+.claude/settings.local.json
+projects/

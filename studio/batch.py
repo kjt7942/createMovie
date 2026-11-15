@@ -1,15 +1,14 @@
 """Wan2GP batches (image, video, speech, music) in the one queue, so they never overlap H3 or promo renders.
 
 A batch is <root>/<name>/batch.json plus one <item>/ folder per job (job.json, out/). Items with one model run in one
-Wan2GP process, so the model loads once. Contest batches live in jobs/contest and only take CONTEST_MODELS; others take any model. Finished items are never redone, so a stopped or failed batch continues where it was.
+Wan2GP process, so the model loads once. Every batch folder lives in projects/<date+time_name>/; a batch.json "contest" flag marks the ones that only take CONTEST_MODELS, others take any model. Finished items are never redone, so a stopped or failed batch continues where it was.
 """
 import functools, json, os, random, re, shutil, subprocess, threading, time
 from pathlib import Path
 
-from . import engine
+from . import engine, ids
 
-CONTEST_ROOT = engine.ROOT / "jobs" / "contest"
-CONTENT_ROOT = engine.ROOT / "jobs" / "content"
+CONTEST_ROOT = CONTENT_ROOT = ids.PROJECTS  # 한 폴더(projects/) 아래에 프로젝트 단위로. 공모전용 여부는 batch.json의 "contest" 값
 # Commercial use allowed and Korea not excluded, checked on each model's official page on 2026-11-02 (Apache 2.0 or MIT).
 # Left out on purpose: H3, Hunyuan (Korea excluded); MMAudio, FLUX.2 klein 9B (non-commercial); LTX-2, Stable Audio 3 (revenue limits).
 CONTEST_MODELS = {"i2v_2_2", "i2v_2_2_lightning_contest", "t2v_2_2", "ti2v_2_2", "flf2v_720p", "infinitetalk",
@@ -17,8 +16,8 @@ CONTEST_MODELS = {"i2v_2_2", "i2v_2_2_lightning_contest", "t2v_2_2", "ti2v_2_2",
                   "ace_step_v1_5", "qwen3_tts_voicedesign"}
 CONTEST_UPSCALERS = ("seedvr2", "flashvsr", "lanczos")
 CONTEST_INTERPOLATORS = ("rife",)
-SAFE_NAME = re.compile(r"[A-Za-z0-9_-]{1,80}")
-PROMO_ID = re.compile(r"[0-9a-f]{12}")  # The other external queue's ids.
+SAFE_NAME = re.compile(r'(?!\.)[^\\/:*?"<>|\x00-\x1f\s]{1,80}')  # 한글 폴더 이름 허용. 경로 문자·공백·맨 앞 점은 안 된다
+PROMO_ID = re.compile(r"[0-9a-f]{12}")  # 예전 홍보 영상 ID와 겹치는 이름은 막는다.
 SECONDS_PER_ITEM = 165
 POLL_S = 2  # Must stay shorter than one task: results go to the task that last completed.
 SILENCE_S = 30 * 60  # One hung item must not hold the whole queue.
@@ -91,7 +90,8 @@ def _newest(folder, since=0):
 def create(name, title, items, contest=True):
     """Keeps an existing result only when its job.json is identical, so changed prompts are generated again."""
     d = _dir(name, contest)
-    if (_dir(name, not contest) / "batch.json").exists():
+    other = _dir(name, not contest)
+    if other != d and (other / "batch.json").exists():   # 폴더가 둘로 나뉜 예전 구성에서만 해당
         raise engine.StudioError("같은 이름의 배치가 이미 있습니다.")
     if not items:
         raise engine.StudioError("작업이 없습니다.")
@@ -147,7 +147,8 @@ def create_from_form(form, files):
     if not isinstance(extra, dict):
         raise engine.StudioError("추가 설정은 JSON 객체여야 합니다.")
     contest = form.get("contest") == "1"
-    name = time.strftime("c%Y%m%d_%H%M%S")
+    title = form.get("title", "").strip() or f"{model} · {job.get('prompt', '')[:30]}"
+    name = ids.new_id(form.get("title", "").strip() or model, "콘텐츠", root=CONTENT_ROOT)   # 날짜시분초_이름
     inputs = _dir(name, contest) / "inputs"
     saved = {}
     for field, exts in UPLOADS.items():
@@ -169,7 +170,7 @@ def create_from_form(form, files):
         job["audio_guide"] = saved["audio"][0]
     job.update(extra)
     items = [{"name": f"r{i + 1}_seed{seed + i}", "job": dict(job, seed=seed + i)} for i in range(count)]
-    create(name, form.get("title", "").strip() or f"{model} · {job.get('prompt', '')[:30]}", items, contest)
+    create(name, title, items, contest)
     return name
 
 
@@ -230,7 +231,7 @@ def redo(name):
 
 def list_all():
     out = []
-    for f in [*CONTEST_ROOT.glob("*/batch.json"), *CONTENT_ROOT.glob("*/batch.json")]:
+    for f in [g for root in dict.fromkeys([CONTEST_ROOT, CONTENT_ROOT]) for g in root.glob("*/batch.json")]:
         try:
             out.append(dict(json.loads(f.read_text(encoding="utf-8")), at=f.stat().st_mtime))
         except (OSError, ValueError):

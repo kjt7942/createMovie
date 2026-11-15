@@ -88,7 +88,7 @@ async function renderJob(cfg, { job, rev, files, outputs }) {
   let pct = 0, tail = [], cancelled = false, pr = null, last = -1;
   const timer = setInterval(async () => {   // 진행률 보고(겸 생존 신호) — 받기/렌더/올리기 내내
     if (pct !== last) { process.stdout.write(`\r  진행 ${pct}%   `); last = pct; }
-    const r = await postJson(cfg, `/api/worker/progress/${job}?rev=${rev}`, { pct });
+    const r = await postJson(cfg, `/api/worker/progress/${encodeURIComponent(job)}?rev=${rev}`, { pct });
     if (r.cancel && !cancelled) { cancelled = true; log('\n사용자가 다시 렌더를 요청해 이 작업은 취소합니다.'); pr && killTree(pr); }
   }, 3000);
   try {
@@ -96,7 +96,7 @@ async function renderJob(cfg, { job, rev, files, outputs }) {
   mkdirSync(join(dir, 'assets'), { recursive: true });
   log(`작업 ${job}: 파일 ${files.length}개 받는 중`);
   for (const f of files) {
-    const r = await fetch(`${cfg.server}/jobs/${job}/${f.split('/').map(encodeURIComponent).join('/')}`, { signal: AbortSignal.timeout(10 * 60000) });
+    const r = await fetch(`${cfg.server}/jobs/${encodeURIComponent(job)}/${f.split('/').map(encodeURIComponent).join('/')}`, { signal: AbortSignal.timeout(10 * 60000) });
     if (!r.ok) throw new Error(`파일 받기 실패: ${f} (${r.status})`);
     mkdirSync(dirname(join(dir, f)), { recursive: true });   // assets/fonts/ 같은 하위 폴더
     writeFileSync(join(dir, f), Buffer.from(await r.arrayBuffer()));
@@ -123,23 +123,23 @@ async function renderJob(cfg, { job, rev, files, outputs }) {
       if (cancelled) return;
       if (code !== 0 || !existsSync(join(dir, o.out))) {
         log(`\n작업 ${job}: 렌더링 실패 (종료 코드 ${code})`);
-        await postJson(cfg, `/api/worker/fail/${job}?rev=${rev}`, { log: tail.join('\n') || `종료 코드 ${code}` });
+        await postJson(cfg, `/api/worker/fail/${encodeURIComponent(job)}?rev=${rev}`, { log: tail.join('\n') || `종료 코드 ${code}` });
         return;
       }
     }
 
   for (const o of outs) {
     log(`작업 ${job}: 완성 영상 올리는 중 (${o.out})`);
-    const r = await api(cfg, `/api/worker/upload/${job}?rev=${rev}&out=${encodeURIComponent(o.out)}`, {
+    const r = await api(cfg, `/api/worker/upload/${encodeURIComponent(job)}?rev=${rev}&out=${encodeURIComponent(o.out)}`, {
       method: 'POST', headers: { 'Content-Type': 'video/mp4' }, body: await openAsBlob(join(dir, o.out)), timeout: 30 * 60000,
     });
     if (!r.ok) {
       log(`작업 ${job}: 업로드 실패 (${r.status})`);
-      await postJson(cfg, `/api/worker/fail/${job}?rev=${rev}`, { log: `업로드 실패 (HTTP ${r.status})` });
+      await postJson(cfg, `/api/worker/fail/${encodeURIComponent(job)}?rev=${rev}`, { log: `업로드 실패 (HTTP ${r.status})` });
       return;
     }
   }
-  const d = await postJson(cfg, `/api/worker/done/${job}?rev=${rev}`, {});
+  const d = await postJson(cfg, `/api/worker/done/${encodeURIComponent(job)}?rev=${rev}`, {});
   log(d.ok ? `작업 ${job}: 완료!` : `작업 ${job}: 마무리 실패`);
   } finally { clearInterval(timer); process.stdout.write('\n'); rmSync(dir, { recursive: true, force: true }); }
 }
@@ -164,7 +164,7 @@ async function main() {
         try { await renderJob(cfg, j); }
         catch (e) {
           log(`작업 ${j.job}: 오류 — ${e.message}`);
-          await postJson(cfg, `/api/worker/fail/${j.job}?rev=${j.rev}`, { log: 'PC 워커 오류: ' + e.message });
+          await postJson(cfg, `/api/worker/fail/${encodeURIComponent(j.job)}?rev=${j.rev}`, { log: 'PC 워커 오류: ' + e.message });
         }
         continue;
       }

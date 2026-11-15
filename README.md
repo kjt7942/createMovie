@@ -34,6 +34,31 @@
 
 Wan2GP 안의 대체 모델: Wan 2.2 I2V·Wan 2.1 FLF2V·VACE, Qwen-Image-Edit 2511은 Apache 2.0, ACE-Step 1.5는 MIT. Hunyuan 계열은 대한민국이 제외 지역이라 쓰지 않습니다.
 
+## 스모 (script-to-motion 스킬) — AI 에이전트 전용
+
+대본이나 주제로 **내레이션이 있는 모션그래픽 영상**을 만드는 Claude Code용 스킬입니다. 웹서비스(5100)에는 표시하지 않고,
+이 저장소 폴더에서 Claude Code(AI 에이전트)를 실행했을 때만 쓰입니다. 스킬은 `.claude/skills/script-to-motion/`에 있고
+(원본 `kstost/script-to-motion`, MIT), Windows·마우스오버 진행바/단축키 도움말/클릭 재생 정지 수정이 들어 있습니다.
+
+다른 PC(집 등)에서 처음 쓸 때:
+1. 필요한 도구: Node.js 22 이상, Python 3, FFmpeg. 저장소를 받은 뒤 `cd .claude/skills/script-to-motion/scripts && npm install`
+2. `node setup_browser.mjs` (헤드리스 브라우저 점검·설치). 한국어 Windows에서는 `PYTHONUTF8=1`을 켜고 `render.py`를 실행합니다.
+3. 내레이션이 필요하면 `.claude/skills/script-to-motion/.env`에 `FISH_API_KEY=`와 `FISH_VOICE=`를 넣습니다(git에 올라가지 않음).
+4. 이 폴더에서 Claude Code를 열고 "스모로 ○○ 영상 만들어줘"라고 요청합니다. 결과는 HTML(`index.html`)로 먼저 확인합니다. MP4는 사용자가 요청할 때만 만들며, `render.py`가 AI 에이전트의 MP4 실행을 막습니다(요청 시 `SUMO_RENDER_OK=1`을 붙여 실행. 사용자가 직접 실행하는 것은 막지 않음).
+
+스모로 만든 영상은 크무 프로젝트와 같은 폴더(`projects/`)에 `날짜시분초_프로젝트명`으로 만들어집니다(아래 "프로젝트 폴더"). 폴더 이름을 따로 말하지 않으면 스모가 알아서 이 규칙으로 만듭니다.
+
+## 프로젝트 폴더 (크무·스모 공통)
+
+크무(홍보 영상, AI 영상 생성, 캐릭터 생성, 콘텐츠 생성)와 스모로 만든 결과물은 **`projects/` 한 폴더 아래에 프로젝트마다 폴더 하나**로 만들어집니다.
+이름은 `날짜시분초_프로젝트명`입니다. 예: `projects/20261115101135_가족캠프_홍보/`. 프로젝트 이름의 공백은 `_`로 바뀌고 40자까지 씁니다.
+폴더 안의 표지 파일로 종류를 구분합니다: `meta.json` 홍보 영상, `project.json` AI 영상, `character.json` 캐릭터, `batch.json` 콘텐츠 생성·캐릭터 시안.
+`jobs/`에는 설정·로그·사용량 기록만 남습니다. `projects/`는 사진과 영상이 들어 있어 git에 올리지 않습니다.
+
+- 크무 홍보 영상: **자료 올리기 화면의 "프로젝트 이름" 칸**에 적은 이름으로, 처음 자료를 올릴 때 폴더가 만들어집니다(비우면 `홍보영상`). 만든 뒤에는 이름을 바꿀 수 없습니다.
+- 스모: `node new_project.mjs --title "이름"`처럼 폴더를 지정하지 않으면 현재 폴더의 `projects/`(또는 `SUMO_PROJECTS_DIR`)에 같은 규칙으로 만듭니다.
+- 예전 방식(`jobs/<12자리 ID>`, `jobs/studio`, `jobs/characters`, `jobs/content`)의 프로젝트는 `python tools/migrate_projects.py`로 옮깁니다(`--dry-run`으로 미리 확인). 서버를 켰을 때 예전 폴더가 남아 있으면 안내가 나옵니다.
+
 ## 실행
 **자동 설치(Windows 10/11)**: `setup.bat`을 더블클릭합니다. Python 3.11+, Node.js 22+, FFmpeg, Git이 없으면 winget으로 설치하고, 패키지·글꼴·렌더링 엔진을 받고, Gemini API 키를 물은 뒤 바탕화면 바로가기를 만듭니다. 이미 있는 것은 건너뛰므로 여러 번 실행해도 됩니다. NVIDIA GPU가 있으면 AI 영상 생성 도구(약 80GB)도 설치할지 묻습니다(`setup.bat -H3`는 묻지 않고 설치).
 
