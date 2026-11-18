@@ -134,6 +134,11 @@ def create_character():
     return jsonify(engine.create_character(request.form.get("name"), request.form.get("description"), images))
 
 
+@app.post("/api/characters/<cid>/rename")
+def rename_character(cid):
+    return jsonify(engine.rename_character(cid, body().get("name")))
+
+
 @app.post("/api/characters/<cid>/delete")
 def delete_character(cid):
     engine.delete_character(cid)
@@ -145,7 +150,7 @@ def charmaker_front():
     d = request.form if request.content_type and request.content_type.startswith("multipart/") else body()  # 참고 이미지가 있으면 폼으로 온다
     refs = [f.read() for f in request.files.getlist("refs") if f.filename]
     cid = charmaker.front(d.get("name"), d.get("description"), d.get("description_ko"), d.get("size"), d.get("count"),
-                             d.get("shot") or "sheet", d.get("background"), refs)
+                             d.get("shot") or "sheet", d.get("background"), refs, d.get("lens") or "", d.get("photo_style") or "")
     runner.enqueue_external(lambda: batch.mark_queued(cid))
     return jsonify(id=cid)
 
@@ -282,6 +287,24 @@ def start_batch(name):
 def pick_item(name):
     d = body()
     batch.set_pick(name, str(d.get("item")), bool(d.get("on")))
+    return jsonify(ok=True)
+
+
+@app.post("/api/batches/<name>/trash")
+def trash_batch(name):
+    batch.trash(name, bool(body().get("on", True)))
+    return jsonify(ok=True)
+
+
+@app.post("/api/batches/<name>/delete")
+def delete_batch(name):
+    batch.delete(name)
+    return jsonify(ok=True)
+
+
+@app.post("/api/projects/<pid>/trash")
+def trash_project(pid):
+    runner.trash(pid, bool(body().get("on", True)))
     return jsonify(ok=True)
 
 

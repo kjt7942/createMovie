@@ -11,6 +11,12 @@ SIZES = {"draft": "480x832", "high": "720x1280"}  # 초안 먼저, 마음에 들
 FRONT = ("Full-body front view, standing straight and facing the viewer, centered, the whole body visible from head to toe, "
          "plain white background, character design reference sheet, no text, no watermark.")
 PORTRAIT = "Upper-body portrait facing the viewer, realistic photo, high detail, no text, no watermark."
+# 실사 초상의 렌즈. "여친렌즈"는 인물을 예쁘게 찍기 좋은 35mm 환산 85mm 전후 준망원 단렌즈의 애칭이다.
+LENSES = {
+    "85": "Shot on a DSLR with an 85mm f/1.8 portrait prime (the classic girlfriend lens), compressed semi-telephoto perspective, minimal face distortion, creamy background blur that makes the subject stand out.",
+    "50": "Shot on a DSLR with a 50mm f/1.8 standard prime, natural perspective close to human vision, gentle background blur.",
+    "35": "Shot on a DSLR with a 35mm f/1.8 prime, casual everyday snapshot that keeps the surroundings in frame, mild background blur.",
+}
 SHOTS = {"sheet": FRONT, "portrait": PORTRAIT}  # 전신 캐릭터 시트 / 상반신 초상(배경 포함)
 SAME = "The same character as in the reference image, with exactly the same face, design, colors, outfit and proportions. "
 VIEWS = {  # engine.CHARACTER_VIEWS 키 -> 편집 프롬프트
@@ -51,7 +57,7 @@ def _ref_image(data):
     return im
 
 
-def front(name, description, description_ko, size, count, shot="sheet", background="", refs=()):
+def front(name, description, description_ko, size, count, shot="sheet", background="", refs=(), lens="", photo_style=""):
     """정면 시안 배치를 만든다. description은 영어 외형 설명(engine.create_character와 같은 규칙).
     refs: 참고 이미지 bytes 목록. 있으면 Qwen-Image-Edit로 그 생김새·그림체를 따라 만든다."""
     name, description = " ".join(str(name or "").split()), " ".join(str(description or "").split())
@@ -64,6 +70,12 @@ def front(name, description, description_ko, size, count, shot="sheet", backgrou
     if shot not in SHOTS:
         raise engine.StudioError("구도를 고르세요.")
     background = " ".join(str(background or "").split()) if shot == "portrait" else ""
+    lens = str(lens or "") if shot == "portrait" else ""
+    if lens and lens not in LENSES:
+        raise engine.StudioError("렌즈를 고르세요.")
+    photo_style = " ".join(str(photo_style or "").split()) if shot == "portrait" else ""
+    if any("가" <= c <= "힣" for c in photo_style):
+        raise engine.StudioError("사진 느낌은 영어로 적으세요. '영어로 다듬기'를 누르면 채워집니다.")
     refs = [r for r in refs if r]
     if len(refs) > MAX_REFS:
         raise engine.StudioError(f"참고 이미지는 {MAX_REFS}장까지 올릴 수 있습니다.")
@@ -71,7 +83,7 @@ def front(name, description, description_ko, size, count, shot="sheet", backgrou
     count = max(1, min(8, int(count or 4)))
     seed = random.randrange(2 ** 31)
     cid = ids.new_id(name, "캐릭터", root=batch.CONTENT_ROOT)  # 날짜시분초_캐릭터이름. 같은 초에 같은 이름이면 _2를 붙여 덮어쓰지 않는다
-    prompt = " ".join(x for x in (description, background and f"Background: {background}.", SHOTS[shot]) if x)
+    prompt = " ".join(x for x in (description, background and f"Background: {background}.", photo_style, lens and LENSES[lens], SHOTS[shot]) if x)
     job = {"model_type": T2I, "prompt": prompt, "resolution": SIZES[size], "batch_size": 1}
     if pictures:
         inputs = batch._dir(cid, False) / "inputs"
@@ -84,7 +96,7 @@ def front(name, description, description_ko, size, count, shot="sheet", backgrou
     items = [{"name": f"front_s{k + 1}", "job": dict(job, seed=seed + k)} for k in range(count)]
     batch.create(cid, f"캐릭터 {name} · 정면", items, contest=False)
     batch._update(cid, character={"name": name, "description": description, "description_ko": str(description_ko or "").strip(),
-                                  "size": size, "shot": shot, "refs": len(pictures), "views": cid + "_v", "registered": None})
+                                  "size": size, "shot": shot, "lens": lens, "photo_style": photo_style, "refs": len(pictures), "views": cid + "_v", "registered": None})
     return cid
 
 

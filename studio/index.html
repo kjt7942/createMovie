@@ -40,7 +40,9 @@ pre.log { max-height:220px; overflow:auto; background:var(--surface-2); padding:
 .char label { display:flex; gap:8px; align-items:center; color:var(--ink); margin:0; flex:1 1 140px; min-width:0; overflow-wrap:anywhere; }
 .char b { color:var(--brand); }
 .char .thumbs { display:flex; gap:4px; }
-.char img { width:52px; height:52px; object-fit:contain; background:#fff; border:1px solid var(--line); border-radius:6px; }
+.char img { width:52px; height:52px; object-fit:contain; background:#fff; border:1px solid var(--line); border-radius:6px; cursor:zoom-in; }
+#zoom { position:fixed; inset:0; z-index:99; background:#000d; display:flex; align-items:center; justify-content:center; cursor:zoom-out; }
+#zoom img { width:auto; height:auto; max-width:94vw; max-height:94vh; object-fit:contain; border:0; cursor:zoom-out; }
 .checks div { padding:2px 0; font-size:14px; overflow-wrap:anywhere; }
 </style>
 </head>
@@ -204,6 +206,12 @@ async function loadCharacters() {
   chosen = chosen.filter(id => characters.some(c => c.id === id));
   drawCharacters();
 }
+function zoom(src, alt) {  // 썸네일 크게 보기: 아무 데나 누르거나 Esc로 닫는다
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  const box = el('div', { id: 'zoom', on: { click: close } }, el('img', { src, alt }));
+  document.addEventListener('keydown', onKey); document.body.append(box);
+}
 function drawCharacters() {  // Tick order decides who is Character A, B, C in the LLM's script.
   fill($('charList'), ...(characters.length ? characters.map(c => {
     const n = chosen.indexOf(c.id);
@@ -212,12 +220,18 @@ function drawCharacters() {  // Tick order decides who is Character A, B, C in t
       try { await api(`/api/characters/${c.id}/delete`, {}); await loadCharacters(); saveSettings(); }
       catch (e) { message($('charMsg'), e.message, 'bad'); }
     } } });
+    const ren = el('button', { type: 'button', textContent: '이름 바꾸기', on: { click: async () => {
+      const name = prompt('새 이름 (40자 이내)', c.name);
+      if (name === null || !name.trim() || name.trim() === c.name) return;
+      try { await api(`/api/characters/${c.id}/rename`, { name: name.trim() }); await loadCharacters(); }
+      catch (e) { message($('charMsg'), e.message, 'bad'); }
+    } } });
     return el('div', { class: n >= 0 ? 'char on' : 'char' },
       el('label', {}, el('input', { type: 'checkbox', checked: n >= 0, on: { change: e => {
         chosen = e.target.checked ? [...chosen, c.id] : chosen.filter(id => id !== c.id);
         drawCharacters(); saveSettings(); $('createBtn').disabled = $('queueBtn').disabled = true;
       } } }), n >= 0 ? el('b', { textContent: `Character ${String.fromCharCode(65 + n)}` }) : null, c.name),
-      el('div', { class: 'thumbs' }, ...c.views.map((v, k) => el('img', { src: `/h3/api/characters/${c.id}/image/${k}`, alt: `${c.name} ${v}`, title: v }))), del);
+      el('div', { class: 'thumbs' }, ...c.views.map((v, k) => el('img', { src: `/h3/api/characters/${c.id}/image/${k}`, alt: `${c.name} ${v}`, title: `${v} (클릭하면 크게 봅니다)`, on: { click: e => zoom(e.target.src, e.target.alt) } }))), ren, del);
   }) : [el('div', { class: 'muted', textContent: '등록한 캐릭터가 없습니다. 고르지 않으면 스크립트 설명만으로 생성합니다.' })]));
   if (chosen.length && !charModelReady) message($('charMsg'), '캐릭터 영상용 모델이 없습니다. python tools/setup_h3.py 를 실행해 내려받으세요(약 21GB).', 'warn');
   else $('charMsg').replaceChildren();

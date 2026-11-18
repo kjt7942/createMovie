@@ -10,6 +10,7 @@ main { max-width:1200px; margin:0 auto; padding:16px; }
 section { margin-bottom:28px; }
 .head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .head h2 { margin:0; font-size:18px; }
+button.danger { color:#c0392b; border-color:#c0392b; }
 .track { height:8px; border-radius:4px; background:var(--line); overflow:hidden; margin:8px 0; }
 .track div { height:100%; background:currentColor; }
 .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:10px; }
@@ -63,6 +64,7 @@ figure.pick { outline:3px solid #2e9e4f; }
   <label class="check wide"><input name="contest" type="checkbox" value="1">공모전용 (라이선스 확인된 모델만 허용)</label>
   <div class="wide"><button type="submit">대기열에 넣기</button> <small>비운 항목은 모델 기본값을 씁니다. 처음 쓰는 모델은 내려받느라 오래 걸립니다.</small></div>
 </form>
+<div id="trashBar"></div>
 <div id="list" aria-live="polite"></div>
 </main>
 <div id="lb" role="dialog" aria-label="이미지 크게 보기"><img alt=""><div class="bar"><button id="lbp">← 이전</button><span id="lbt"></span><button id="lbn">다음 →</button><button id="lbk">☆ 선택 (Space)</button><a id="lbo" target="_blank" rel="noopener">새 탭에서 열기</a><button id="lbc">닫기 (Esc)</button></div><div class="pr" id="lbr"></div></div>
@@ -128,20 +130,49 @@ form.onsubmit = async e => {
   if (r.error) { alert(r.error); return; }
   last = ''; refresh();
 };
-let last = '';
+let last = '', showTrash = false;
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(x => x.json()).catch(() => ({ error: '서버 연결 끊김' }));
+// 삭제 = 목록에서만 숨김(파일은 남음, 복원 가능). 완전삭제 = 폴더와 결과 파일까지 지움(되돌릴 수 없음).
+function trashButtons(kind, id, title, trashed) {
+  const base = kind === 'batch' ? `/h3/api/batches/${id}` : `/h3/api/projects/${encodeURIComponent(id)}`;
+  const run = async (path, body) => { const r = await post(`${base}/${path}`, body); if (r.error) alert(r.error); last = ''; refresh(); };
+  if (!trashed) { const d = el('button', '삭제'); d.onclick = () => run('trash', { on: true }); return [d]; }
+  const re = el('button', '복원'); re.onclick = () => run('trash', { on: false });
+  const rm = el('button', '완전삭제', 'danger');
+  rm.onclick = () => { if (confirm(`'${title}'을(를) 완전히 지웁니다. 결과 파일까지 사라지며 되돌릴 수 없습니다.`)) run('delete'); };
+  return [re, rm];
+}
 async function refresh() {
   if (document.hidden) return;
   let data;
   try { data = await fetch('/h3/api/batches').then(r => r.json()); } catch { return; }
-  const text = JSON.stringify(data);
+  // AI 영상 생성 프로젝트도 여기에 함께 보인다(어디서 생성을 시켜도). 폴더명이 날짜시분초로 시작하므로 이름순 = 만든 순.
+  const vids = await fetch('/h3/api/projects').then(r => r.json()).then(d => d.projects || []).catch(() => []);
+  const text = JSON.stringify([data, vids]);
   if (text === last) return;  // 다시 그리면 재생 중인 영상이 멈춘다
   last = text;
   list.replaceChildren();
-  if (!data.batches.length) list.append(el('p', '아직 만든 작업이 없습니다.'));
-  data.batches.slice().reverse().forEach(b => {
+  const isTrashed = r => !!(r.b ? r.b.trashed : r.v.trashed);
+  const trashCount = [...data.batches, ...vids].filter(x => x.trashed).length;
+  const tb = el('button', showTrash ? '← 목록으로' : `삭제한 항목 보기 (${trashCount})`);
+  tb.onclick = () => { showTrash = !showTrash; last = ''; refresh(); };
+  document.getElementById('trashBar').replaceChildren(...(trashCount || showTrash ? [tb] : []));
+  const rows = [...data.batches.map(b => ({ id: b.name, b })), ...vids.map(v => ({ id: v.id, v }))].sort((x, y) => x.id < y.id ? 1 : -1).filter(r => isTrashed(r) === showTrash);
+  if (!rows.length) list.replaceChildren(el('p', showTrash ? '삭제한 항목이 없습니다.' : '아직 만든 작업이 없습니다.'));
+  rows.forEach(({ b, v }) => {
+    if (v) {
+      const s = el('section'), head = el('div', '', 'head');
+      head.append(el('h2', v.title), el('span', `${WORD[v.status] || v.status} · AI 영상`), el('span', 'AI 영상', 'tag'));
+      if (!['queued'].includes(v.status) || showTrash) head.append(...trashButtons('project', v.id, v.title, showTrash));
+      const a = el('a', 'AI 영상 생성 화면에서 열기'); a.href = `/h3/?open=${encodeURIComponent(v.id)}`; head.append(a);
+      s.append(head);
+      if (v.status === 'done') { const m = document.createElement('video'); m.src = `/h3/media/${encodeURIComponent(v.id)}/final.mp4`; m.controls = true; m.preload = 'metadata'; m.style.maxHeight = '420px'; s.append(m); }
+      list.append(s); return;
+    }
     const done = b.items.filter(i => i.status === 'done').length, s = el('section'), head = el('div', '', 'head');
     head.append(el('h2', b.title), el('span', `${WORD[b.state] || b.state} · ${done}/${b.items.length}`));
     if (b.contest !== false) head.append(el('span', '공모전', 'tag'));
+    if (!['queued', 'running'].includes(b.state) || showTrash) head.append(...trashButtons('batch', b.name, b.title, showTrash));
     if (!['queued', 'running'].includes(b.state) && done < b.items.length) {
       const go = el('button', done ? '이어서 생성' : '생성 시작');
       go.onclick = async () => {

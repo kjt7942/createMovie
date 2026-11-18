@@ -690,6 +690,14 @@ def check_characters():
         assert not engine.CHARACTERS.exists() or not list(engine.CHARACTERS.iterdir()), "a refused upload must leave nothing"
         c = engine.create_character("Hen", desc, {"back": buf.getvalue(), "front": buf.getvalue()})
         assert c["views"] == ["front view", "back view"] and [x["id"] for x in engine.list_characters()] == [c["id"]]
+        for bad_name in ("", "x" * 41):
+            try:
+                engine.rename_character(c["id"], bad_name)
+                raise AssertionError("accepted bad name")
+            except engine.StudioError:
+                pass
+        assert engine.rename_character(c["id"], "  Big  Hen ")["name"] == "Big Hen" and engine.load_character(c["id"])["name"] == "Big Hen"
+        assert engine.load_character(c["id"])["views"] == ["front view", "back view"], "renaming must keep the rest"
         im = Image.open(engine.character_dir(c["id"]) / "0.png")
         assert im.size == (1024, 1024) and im.mode == "RGB" and im.getpixel((512, 512)) == (255, 255, 255), "transparency must become white"
         im.close()

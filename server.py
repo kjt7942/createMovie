@@ -1039,7 +1039,7 @@ def projects():
                     'photos': len(m['photos']), 'thumb': pl.get('intro_photo') or m['photos'][0]['id'],
                     'video': os.path.exists(os.path.join(d, 'output.mp4')), 'portrait': os.path.exists(os.path.join(d, 'output_portrait.mp4')), 'length': st.get('length'),
                     'scenes': len(pl.get('scenes', []))})
-    return jsonify(projects=sorted(out, key=lambda x: -x['mtime']))
+    return jsonify(projects=sorted(out, key=lambda x: x['job'], reverse=True))  # 폴더명이 날짜시분초로 시작 = 만든 순. 최신이 위
 
 
 @app.get('/api/project/<job>')
@@ -1134,10 +1134,13 @@ Describe only what can be seen: art style (keep the user's style; default to a c
 species or body type, age look, face, hair, eyes, clothing with colors and patterns, accessories, and distinctive marks.
 Turn personality and background story into visible cues only (facial expression, eye shape, posture, outfit, props).
 Keep body proportions the user gives (for example "3 heads tall" means a big head on a short chibi body).
+If the Korean text asks for a real photo (실사, 사진, 촬영, 카메라) do not default to cartoon: describe a real person in a photorealistic way.
 Use concrete colors. Do not put the scene background, camera or story in the description. No names, no Korean, no quotes.
 If the Korean text describes a background, write it separately as a short English phrase in "background"; otherwise "".
+If the Korean text describes the photo feel (camera, lens, mood of the shot such as a girlfriend-style snapshot, lighting, film look), write it as one short English sentence in "photo_style"; otherwise "".
+Keep makeup and skin wishes exactly as meant: "covered by makeup" means the blemishes are concealed, not visible.
 Keep the user's requested mood and appeal words (for example sexy, glamorous, charming) in the description.
-Return JSON: {"description": "...", "background": "..."}
+Return JSON: {"description": "...", "background": "...", "photo_style": "..."}
 Korean description:
 %s"""
 
@@ -1156,7 +1159,8 @@ def character_english():
     if len(desc) < 20:
         return jsonify(error='영어 설명을 만들지 못했습니다. 다시 눌러 주세요.'), 502
     bg = re.sub(r'[가-힣一-鿿]', '', ' '.join(str(d.get('background', '')).split())).strip()
-    return jsonify(description=desc, background=bg)
+    ps = re.sub(r'[가-힣一-鿿]', '', ' '.join(str(d.get('photo_style', '')).split())).strip()
+    return jsonify(description=desc, background=bg, photo_style=ps)
 
 
 @app.get('/guide')

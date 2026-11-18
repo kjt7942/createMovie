@@ -208,6 +208,16 @@ def delete(name):
         shutil.rmtree(_dir(name, b.get("contest", True)))
 
 
+def trash(name, on):
+    """목록에서만 숨긴다(삭제)/되돌린다(복원). 파일은 그대로 둔다. 완전히 지우려면 delete()."""
+    with _lock:
+        b = load(name)
+        if on and b["state"] in ("queued", "running"):
+            raise engine.StudioError("대기 중이거나 생성 중인 배치는 삭제할 수 없습니다. 대기열에서 빼거나 멈춘 뒤 삭제하세요.")
+        b["trashed"] = bool(on)
+        _save(b)
+
+
 def _cut(item_name):
     return re.sub(r"_s\d+$", "", item_name)  # c05_s1, c05_s2 -> c05: 같은 컷의 시안끼리 묶는다
 
@@ -233,10 +243,10 @@ def list_all():
     out = []
     for f in [g for root in dict.fromkeys([CONTEST_ROOT, CONTENT_ROOT]) for g in root.glob("*/batch.json")]:
         try:
-            out.append(dict(json.loads(f.read_text(encoding="utf-8")), at=f.stat().st_mtime))
+            out.append(dict(json.loads(f.read_text(encoding="utf-8")), at=f.stat().st_mtime, folder=f.parent.name))
         except (OSError, ValueError):
             continue  # A broken folder must not hide the others.
-    return sorted(out, key=lambda b: b["at"])  # oldest first; the page reverses so the newest is on top
+    return sorted(out, key=lambda b: b["folder"])  # folder name starts with the creation time (mtime changes on edits and migration); oldest first; the page reverses so the newest is on top
 
 
 def output_file(name, item_name):

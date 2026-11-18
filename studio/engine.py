@@ -590,6 +590,20 @@ def create_character(name, description, images):
     return character
 
 
+def rename_character(cid, name):
+    """이름만 바꾼다. 이미 만든 영상 프로젝트의 캐릭터 이름(만들 때 복사됨)은 그대로다."""
+    name = " ".join(str(name or "").split())
+    if not 1 <= len(name) <= 40:
+        raise StudioError("캐릭터 이름을 40자 안으로 입력하세요.")
+    character = load_character(cid)
+    character["name"] = name
+    path = character_dir(cid) / "character.json"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(character, ensure_ascii=False, indent=1), encoding="utf-8")
+    os.replace(tmp, path)
+    return character
+
+
 def delete_character(cid):
     load_character(cid)
     shutil.rmtree(character_dir(cid))
@@ -603,7 +617,7 @@ def list_projects():
                 p = load_project(d.name)
                 if p.get("test"):
                     continue  # System tests show on the setup page.
-                out.append({"id": p["id"], "title": p["script"]["title"], "status": p["status"], "created": p["created"]})
+                out.append({"id": p["id"], "title": p["script"]["title"], "status": p["status"], "created": p["created"], "trashed": bool(p.get("trashed"))})
             except (StudioError, ValueError, KeyError, OSError):
                 continue  # A damaged folder must not hide the other projects.
     return sorted(out, key=lambda p: -p["created"])
@@ -1243,6 +1257,14 @@ class Runner:
                 raise StudioError("파일을 쓰는 중이라 지우지 못했습니다. 이 영상을 재생 중인 탭을 닫고 다시 시도하세요.")
             self._scan = (0.0, [])
         shutil.rmtree(trash, ignore_errors=True)
+
+    def trash(self, pid, on):
+        """목록에서만 숨긴다(삭제)/되돌린다(복원). 파일은 그대로. 완전히 지우려면 delete()."""
+        def change(p):
+            if on and p["status"] == "queued":
+                raise StudioError("대기 중인 프로젝트는 삭제할 수 없습니다. 대기열에서 빼거나 멈춘 뒤 삭제하세요.")
+            p["trashed"] = bool(on)
+        self.edit(pid, change)
 
     def clean(self):
         """Removes what a finished video does not need: archived versions, scratch folders and failed deletions. Returns bytes freed."""
